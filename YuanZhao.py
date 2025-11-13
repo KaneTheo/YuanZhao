@@ -47,11 +47,11 @@ def parse_arguments():
     # 扫描配置
     parser.add_argument('-d', '--depth', type=int, default=3, 
                         help='递归扫描深度（默认：3，0表示仅扫描当前文件/目录）')
-    parser.add_argument('-m', '--mode', choices=['basic', 'advanced', 'all'], default='all', 
+    parser.add_argument('-m', '--mode', choices=['fast', 'standard', 'deep'], default='deep', 
                         help='''扫描模式：
-                        basic（基础扫描）：仅检测基本的暗链和明显的可疑元素，适合快速检查
-                        advanced（高级扫描）：增加JS/HTML/CSS代码分析和隐藏元素检测，平衡速度和深度
-                        all（全部扫描）：执行完整扫描，包括所有检测模块，适合深度安全审计''')
+                        fast（基础）：仅检测基本的暗链与明显可疑元素，快速
+                        standard（高级）：增加JS/HTML/CSS分析与隐藏元素检测
+                        deep（完整）：执行全部检测模块，适合深度审计''')
     parser.add_argument('-t', '--threads', type=int, default=8, 
                         help='并发线程数（默认：8，范围1-100）')
     parser.add_argument('-o', '--output', help='报告输出目录（默认：./reports）')
@@ -74,13 +74,14 @@ def parse_arguments():
                         风险权重范围：1-10，10为最高风险''')
     parser.add_argument('--exclude', nargs='+', help='排除的文件或目录（支持通配符，如 "*.log" "node_modules/"）')
     parser.add_argument('--no-color', action='store_true', help='禁用彩色输出')
-    parser.add_argument('--verbose', action='store_true', default=True, help='显示详细日志信息，包括检测过程和调试内容')
+    parser.add_argument('--verbose', action='store_true', default=False, help='显示详细日志信息，包括检测过程和调试内容')
     
     # 无头浏览器选项
     parser.add_argument('--headless', action='store_true', help='启用无头浏览器扫描 (增强动态内容检测)')
     parser.add_argument('--browser-type', choices=['chrome'], default='chrome', help='无头浏览器类型 (默认: chrome)')
     parser.add_argument('--js-wait', type=int, default=3, help='JavaScript执行等待时间 (秒, 默认: 3)')
     parser.add_argument('--headless-timeout', type=int, default=60, help='无头浏览器超时时间 (秒, 默认: 60)')
+    parser.add_argument('--headless-binary', help='Chrome二进制路径 (例如: C\\Program Files\\Google\\Chrome\\Application\\chrome.exe)')
     
     # 添加使用示例
     parser.epilog = '''
@@ -92,19 +93,19 @@ def parse_arguments():
   python YuanZhao.py ./website -d 2
   
   # 扫描URL，使用高级模式，保存为HTML格式报告
-  python YuanZhao.py https://example.com -m advanced -f html
+  python YuanZhao.py https://example.com -m standard -f html
   
   # 使用自定义关键字文件，禁用彩色输出
   python YuanZhao.py ./website --keyword-file custom_keywords.txt --no-color
   
   # 完整扫描公网网站并生成HTML报告（优化后格式，在上下文列显示完整问题链接）
-  python YuanZhao.py https://example.com -m all -d 1 -t 8 --timeout 30 -f html --verbose
+  python YuanZhao.py https://example.com -m deep -d 1 -t 8 --timeout 30 -f html --verbose
   
   # 扫描特定新闻页面并在可疑链接详情中显示问题信息
-  python YuanZhao.py https://example.com/news.php -m all -d 1 -t 8 --timeout 30 -f html --verbose
+  python YuanZhao.py https://example.com/news.php -m deep -d 1 -t 8 --timeout 30 -f html --verbose
   
   # 对内网网站进行深度扫描，使用较长超时时间
-  python YuanZhao.py http://192.168.1.100 -d 4 -m all --timeout 60 -f html -o intranet_reports
+  python YuanZhao.py http://192.168.1.100 -d 4 -m deep --timeout 60 -f html -o intranet_reports
   
   # 扫描并排除特定文件类型
   python YuanZhao.py ./website --exclude "*.log" "temp/*" "node_modules/"
@@ -195,11 +196,11 @@ def main():
     config.crawl_depth = args.depth
     config.depth = args.depth  # 同步更新depth属性
     
-    # 映射扫描模式
+    # 映射扫描模式（仅使用新名称）
     mode_mapping = {
-        'basic': 'fast',
-        'advanced': 'standard',
-        'all': 'deep'
+        'fast': 'fast',
+        'standard': 'standard',
+        'deep': 'deep'
     }
     config.scan_mode = mode_mapping.get(args.mode, 'standard')
     config.mode = config.scan_mode  # 同步更新mode属性
@@ -212,12 +213,17 @@ def main():
     config.report_type = args.format
     config.report_file = os.path.join(report_dir, f"scan_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.{args.format}")
     config.debug = args.verbose
+    # 排除规则
+    config.exclude = args.exclude or []
     
     # 设置无头浏览器配置
     config.use_headless_browser = args.headless
     config.headless_browser = args.browser_type
     config.js_wait_time = args.js_wait
     config.headless_timeout = args.headless_timeout
+    config.headless_binary = args.headless_binary
+    if args.headless:
+        config.headless_auto_download = True
     
     # 记录配置
     log_config(logger, config.get_config_dict())

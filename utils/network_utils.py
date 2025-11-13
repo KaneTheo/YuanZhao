@@ -17,59 +17,14 @@ logger = logging.getLogger('YuanZhao.utils.network')
 URL_PATTERNS = [
     # 标准URL
     re.compile(r'https?://[\w\-\.]+(?:\.[\w\-]+)+[\w\-\._~:/?#[\]@!\$&\'\(\)\*\+,;=.]+'),
-    # 相对路径URL
-    re.compile(r'\\/\\/[\w\-\.]+(?:\.[\w\-]+)+[\w\-\._~:/?#[\]@!\$&\'\(\)\*\+,;=.]+'),
+    # 协议相对URL
+    re.compile(r'//[\w\-\.]+(?:\.[\w\-]+)+[\w\-\._~:/?#[\]@!\$&\'\(\)\*\+,;=.]+'),
     # 仅域名
     re.compile(r'[a-zA-Z0-9][-a-zA-Z0-9]{0,62}(\.[a-zA-Z0-9][-a-zA-Z0-9]{0,62})+\.?'),
     # IP地址形式
     re.compile(r'\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b(?::\d{1,5})?'),
 ]
 
-def extract_urls(text: str, base_url: Optional[str] = None) -> List[Dict[str, str]]:
-    """
-    从文本中提取URL
-    
-    Args:
-        text: 要提取URL的文本
-        base_url: 基础URL，用于解析相对路径
-    
-    Returns:
-        URL列表，每项包含原始URL、规范化URL和URL类型
-    """
-    extracted_urls = []
-    processed_urls = set()  # 用于去重
-    
-    try:
-        for pattern in URL_PATTERNS:
-            matches = pattern.finditer(text)
-            
-            for match in matches:
-                original_url = match.group(0)
-                start_pos = match.start(0)
-                end_pos = match.end(0)
-                
-                # 去重
-                if original_url.lower() in processed_urls:
-                    continue
-                processed_urls.add(original_url.lower())
-                
-                # 规范化URL
-                normalized_url = normalize_url(original_url, base_url)
-                
-                # 确定URL类型
-                url_type = get_url_type(original_url)
-                
-                extracted_urls.append({
-                    'original': original_url,
-                    'normalized': normalized_url,
-                    'type': url_type,
-                    'position': (start_pos, end_pos)
-                })
-        
-    except Exception as e:
-        logger.error(f"提取URL失败: {str(e)}")
-    
-    return extracted_urls
 
 def normalize_url(url: str, base_url: Optional[str] = None) -> str:
     """
@@ -187,7 +142,7 @@ def get_domain(url: str) -> Optional[str]:
         logger.error(f"提取域名失败: {url}, 错误: {str(e)}")
         return None
 
-def is_external_link(url: str, base_domain: str) -> bool:
+def is_external_link(url: str, base_domain: Optional[str] = None) -> bool:
     """
     判断是否为外部链接
     
@@ -199,10 +154,12 @@ def is_external_link(url: str, base_domain: str) -> bool:
         是否为外部链接
     """
     url_domain = get_domain(url)
-    if not url_domain or not base_domain:
+    if not url_domain:
         return False
-    
-    # 检查url_domain是否为同一域名或子域名
+    if not base_domain:
+        # 未提供基础域名时，认为绝对链接均为外部，非 http(s) 或相对路径视为内部
+        return url.startswith(('http://', 'https://'))
+    # 检查是否为同一域名或子域名
     return not (url_domain == base_domain or url_domain.endswith(f'.{base_domain}'))
 
 # 兼容性函数，用于判断字符串是否为URL
@@ -309,8 +266,7 @@ def build_request_session(proxy: Optional[str] = None, timeout: int = 10) -> req
         session.proxies.update(proxies)
         logger.info(f"设置代理: {proxy}")
     
-    # 设置超时
-    session.timeout = timeout
+    # 超时需在请求时传递
     
     return session
 
@@ -358,15 +314,16 @@ def fetch_url_content(url: str, session: Optional[requests.Session] = None, **kw
         kwargs['headers'] = headers
         
         # 增加重试机制
+        timeout = kwargs.get('timeout', 10)
         if session:
-            response = session.get(url, **kwargs)
+            response = session.get(url, timeout=timeout, **kwargs)
         else:
             # 创建临时会话以设置重试策略
             temp_session = requests.Session()
             adapter = requests.adapters.HTTPAdapter(max_retries=3)
             temp_session.mount('http://', adapter)
             temp_session.mount('https://', adapter)
-            response = temp_session.get(url, **kwargs)
+            response = temp_session.get(url, timeout=timeout, **kwargs)
         
         response.raise_for_status()
         
@@ -395,6 +352,48 @@ def extract_domain(url: str) -> Optional[str]:
     """
     return get_domain(url)
 
+def analyze_url_risk(url: str) -> Dict[str, Any]:
+    """
+    评估URL风险等级
+    Returns: {risk_level: int, reason: str}
+    """
+    try:
+        risk = 0
+        reasons = []
+        parsed = urlparse(url)
+        scheme = parsed.scheme.lower()
+        domain = parsed.netloc.lower()
+        # 协议风险
+        if scheme == 'javascript':
+            risk += 5
+            reasons.append('JavaScript协议')
+        elif scheme == 'data':
+            risk += 4
+            reasons.append('Data URI')
+        elif scheme in ('http', 'https'):
+            risk += 1
+        # 端口风险
+        if parsed.port and parsed.port not in [80, 443, 8080, 8443]:
+            risk += 2
+            reasons.append('非标准端口')
+        # 可疑后缀与短链服务
+        suspicious_tlds = ['pro', 'xyz', 'pw', 'top', 'loan', 'win', 'bid', 'online']
+        short_link_domains = ['bit.ly', 'goo.gl', 'tinyurl.com', 't.co', 'ow.ly', 'is.gd', 'adf.ly']
+        if any(domain.endswith('.' + tld) for tld in suspicious_tlds):
+            risk += 2
+            reasons.append('高风险域名后缀')
+        if any(domain.endswith(sl) or domain == sl for sl in short_link_domains):
+            risk += 3
+            reasons.append('短链接服务')
+        # 路径随机性
+        if re.search(r'/[a-zA-Z0-9]{8,}\.(?:js|php)$', parsed.path):
+            risk += 1
+            reasons.append('可疑随机路径')
+        return {'risk_level': min(risk, 10), 'reason': ', '.join(reasons) or '普通URL'}
+    except Exception as e:
+        logger.error(f"URL风险评估失败: {url}, 错误: {str(e)}")
+        return {'risk_level': 0, 'reason': '评估失败'}
+
 def extract_urls(text: str) -> List[Dict[str, Any]]:
     """
     从文本中提取所有URL
@@ -410,15 +409,10 @@ def extract_urls(text: str) -> List[Dict[str, Any]]:
     
     # 增加URL模式匹配
     url_patterns = [
-        # 标准HTTP/HTTPS URL
-        re.compile(r'(https?://[\\w._~:/?#[\\]@!$&\'()*+,-;=]+)', re.IGNORECASE),
-        # 相对路径
-        re.compile(r'(/\\w[-\\w./?%&=]*)', re.IGNORECASE),
-        # 不带协议的域名
+        re.compile(r'(https?://[\w._~:/?#[\]@!$&\'()*+,-;=]+)', re.IGNORECASE),
+        re.compile(r'(/[-\w./?%&=]+)', re.IGNORECASE),
         re.compile(r'([a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9]\.[a-zA-Z]{2,}(?:/[^\s<>"]*)?)', re.IGNORECASE),
-        # JavaScript伪协议
-        re.compile(r'(javascript:[\\w./?%&=;(),\'"`-]+)', re.IGNORECASE),
-        # data URI
+        re.compile(r'(javascript:[\w./?%&=;(),\'"`-]+)', re.IGNORECASE),
         re.compile(r'(data:[^;]+;base64,[^\s<>"]+)', re.IGNORECASE),
     ]
     

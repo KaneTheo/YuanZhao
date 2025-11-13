@@ -215,7 +215,13 @@ def log_summary(logger, total_files, scanned_files, issues_found, scan_time):
     logger.info(f"  已扫描文件: {scanned_files}")
     logger.info(f"  发现问题: {issues_found}")
     logger.info(f"  扫描耗时: {scan_time:.2f} 秒")
-    logger.info(f"  平均速度: {scanned_files/scan_time:.2f} 文件/秒")
+    try:
+        if scan_time > 0:
+            logger.info(f"  平均速度: {scanned_files/scan_time:.2f} 文件/秒")
+        else:
+            logger.info("  平均速度: N/A (耗时为0)")
+    except Exception:
+        logger.info("  平均速度: N/A")
     
     # 根据问题数量给出警告级别
     if issues_found > 50:

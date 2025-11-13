@@ -6,7 +6,7 @@ JavaScript处理工具模块
 
 import re
 import logging
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Any
 
 logger = logging.getLogger('YuanZhao.utils.js')
 
@@ -411,17 +411,19 @@ def strip_comments(js_content: str) -> str:
         return js_content
 
 # 兼容性函数，为了支持js_detector.py中的导入
-def identify_obfuscated_code(js_content: str) -> List[Dict[str, str]]:
+def identify_obfuscated_code(js_content: str) -> Dict[str, Any]:
     """
-    检测混淆的JavaScript代码（detect_obfuscated_code的别名）
-    
-    Args:
-        js_content: JavaScript代码
-    
-    Returns:
-        混淆代码列表
+    识别混淆代码并返回聚合信息
     """
-    return detect_obfuscated_code(js_content)
+    segments = detect_obfuscated_code(js_content)
+    is_obf = len(segments) > 0
+    patterns = [seg.get('type', '') for seg in segments]
+    sample = segments[0].get('code_segment', '') if segments else ''
+    return {
+        'is_obfuscated': is_obf,
+        'detected_patterns': patterns,
+        'sample': sample
+    }
 
 def detect_document_modifications(js_content: str) -> List[Dict[str, str]]:
     """

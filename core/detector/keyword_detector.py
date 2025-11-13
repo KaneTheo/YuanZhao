@@ -132,8 +132,10 @@ class KeywordDetector:
         self.keyword_patterns = []
         
         for keyword, category, weight in self.keywords:
-            # 使用不区分大小写的匹配
-            pattern = re.compile(re.escape(keyword), re.IGNORECASE)
+            if keyword.isascii() and re.fullmatch(r'[A-Za-z]+', keyword) and len(keyword) <= 2:
+                pattern = re.compile(r'\b' + re.escape(keyword) + r'\b', re.IGNORECASE)
+            else:
+                pattern = re.compile(re.escape(keyword), re.IGNORECASE)
             self.keyword_patterns.append((pattern, keyword, category, weight))
     
     def detect(self, content: str, source: str) -> List[Dict]:
@@ -253,7 +255,10 @@ class KeywordDetector:
         self.keywords.append((keyword, category, weight))
         
         # 编译新的模式
-        pattern = re.compile(re.escape(keyword), re.IGNORECASE)
+        if keyword.isascii() and re.fullmatch(r'[A-Za-z]+', keyword) and len(keyword) <= 2:
+            pattern = re.compile(r'\b' + re.escape(keyword) + r'\b', re.IGNORECASE)
+        else:
+            pattern = re.compile(re.escape(keyword), re.IGNORECASE)
         self.keyword_patterns.append((pattern, keyword, category, weight))
         
         logger.info(f"成功添加关键字: {keyword} (类别: {category}, 权重: {weight})")

@@ -4,7 +4,6 @@
 支持检测JavaScript动态生成的内容、DOM操作、iframe内容等。
 """
 import logging
-import time
 from typing import List, Dict, Any
 from core.config import Config
 
@@ -29,10 +28,14 @@ class HeadlessBrowserDetector:
             from selenium import webdriver
             from selenium.webdriver.chrome.options import Options
             from selenium.webdriver.chrome.service import Service
-            from webdriver_manager.chrome import ChromeDriverManager
+            import os
+            driver_path = getattr(self.config, 'headless_driver_path', None)
+            binary_path = getattr(self.config, 'headless_binary', None)
             
             # 创建Chrome选项
             chrome_options = Options()
+            if binary_path:
+                chrome_options.binary_location = binary_path
             chrome_options.add_argument('--headless')  # 无头模式
             chrome_options.add_argument('--disable-gpu')  # 禁用GPU加速
             chrome_options.add_argument('--no-sandbox')  # 禁用沙箱
@@ -40,8 +43,16 @@ class HeadlessBrowserDetector:
             chrome_options.add_argument('--window-size=1920,1080')  # 设置窗口大小
             chrome_options.add_argument('--log-level=3')  # 减少日志输出
             
-            # 使用webdriver-manager自动安装和管理ChromeDriver
-            service = Service(ChromeDriverManager().install())
+            # 选择驱动来源：优先本地路径；否则在允许时自动下载
+            if driver_path and os.path.exists(driver_path):
+                service = Service(driver_path)
+            else:
+                if getattr(self.config, 'headless_auto_download', False):
+                    from webdriver_manager.chrome import ChromeDriverManager
+                    service = Service(ChromeDriverManager().install())
+                else:
+                    self.logger.error("未提供本地驱动路径且未启用自动下载，跳过无头浏览器初始化")
+                    return
             
             # 创建浏览器驱动
             self.driver = webdriver.Chrome(service=service, options=chrome_options)
@@ -75,13 +86,19 @@ class HeadlessBrowserDetector:
             return results
         
         try:
+            from selenium.webdriver.support.ui import WebDriverWait
             # 加载页面
             self.logger.info(f"无头浏览器正在加载页面: {url}")
             self.driver.get(url)
             
             # 等待JavaScript执行完成
-            time.sleep(self.config.js_wait_time)
-            self.logger.info(f"等待JavaScript执行完成 ({self.config.js_wait_time}秒)")
+            try:
+                WebDriverWait(self.driver, self.config.js_wait_time).until(
+                    lambda d: d.execute_script("return document.readyState") in ("complete", "interactive")
+                )
+            except Exception:
+                pass
+            self.logger.info(f"等待页面加载/JS执行完成 (<= {self.config.js_wait_time}秒)")
             
             # 执行各项检测
             self.logger.info("开始执行动态链接检测")
@@ -116,8 +133,9 @@ class HeadlessBrowserDetector:
         results = []
         
         try:
+            from selenium.webdriver.common.by import By
             # 获取所有链接元素
-            links = self.driver.find_elements(by='tag name', value='a')
+            links = self.driver.find_elements(By.TAG_NAME, 'a')
             self.logger.info(f"发现 {len(links)} 个链接元素")
             
             for link in links:
@@ -155,7 +173,7 @@ class HeadlessBrowserDetector:
         results = []
         
         # 注入JavaScript以检测可疑的DOM操作
-        monitor_script = """
+        monitor_script = r"""
         (function() {
             const suspiciousPatterns = [];
             
@@ -248,8 +266,9 @@ class HeadlessBrowserDetector:
         results = []
         
         try:
+            from selenium.webdriver.common.by import By
             # 获取所有iframe
-            iframes = self.driver.find_elements(by='tag name', value='iframe')
+            iframes = self.driver.find_elements(By.TAG_NAME, 'iframe')
             self.logger.info(f"发现 {len(iframes)} 个iframe元素")
             
             for index, iframe in enumerate(iframes):
@@ -277,7 +296,7 @@ class HeadlessBrowserDetector:
                         self.driver.switch_to.frame(iframe)
                         
                         # 获取iframe中的链接
-                        iframe_links = self.driver.find_elements(by='tag name', value='a')
+                        iframe_links = self.driver.find_elements(By.TAG_NAME, 'a')
                         for link in iframe_links:
                             href = link.get_attribute('href')
                             if href:
