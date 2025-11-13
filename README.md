@@ -228,10 +228,4 @@ YuanZhao/
 本工具仅供安全测试和应急响应使用，请确保您有足够的授权对目标进行扫描，避免对未经授权的系统进行测试。
 ## Star History
 
-<a href="https://www.star-history.com/#KaneTheo/YuanZhao&type=date&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=KaneTheo/YuanZhao&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=KaneTheo/YuanZhao&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=KaneTheo/YuanZhao&type=date&legend=top-left" />
- </picture>
-</a>
+[![Star History Chart](https://api.star-history.com/svg?repos=KaneTheo/YuanZhao&type=date&legend=top-left)](https://www.star-history.com/#KaneTheo/YuanZhao&type=date&legend=top-left)
