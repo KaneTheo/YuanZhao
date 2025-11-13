@@ -28,7 +28,7 @@
 - **丰富的报告内容**：扫描概览、问题详情、风险评估、上下文展示
 
 ### 灵活的配置选项
-- **多种扫描模式**：基础扫描(basic)、高级扫描(advanced)、全部扫描(all)
+- **多种扫描模式**：fast/standard/deep
 - **性能优化选项**：可配置并发线程数、请求超时设置、代理服务器支持
 
 ## 安装指南
@@ -56,7 +56,7 @@ python YuanZhao.py --help
 python YuanZhao.py /path/to/file.html
 
 # 高级扫描 + HTML报告
-python YuanZhao.py /path/to/file.html -m advanced -f html
+python YuanZhao.py /path/to/file.html -m standard -f html
 
 # 详细日志模式
 python YuanZhao.py /path/to/suspicious.html --verbose
@@ -86,7 +86,7 @@ python YuanZhao.py /path/to/website --exclude "*.jpg" "*.png" "logs/*" "vendor/"
 python YuanZhao.py /path/to/website -t 16
 
 # 完整模式 + 多格式报告
-python YuanZhao.py /path/to/website -m all -f html -o security_reports --threads 12
+python YuanZhao.py /path/to/website -m deep -f html -o security_reports --threads 12
 ```
 
 #### 3. 网络URL扫描场景
@@ -103,7 +103,7 @@ python YuanZhao.py http://localhost:8080
 # 带路径的URL扫描
 python YuanZhao.py https://example.com/news/article
 
-# 设置超时时间
+# 设置超时时间（公网默认使用全局超时，内网未显式设置时会按较长超时）
 python YuanZhao.py https://example.com --timeout 60
 
 # 使用代理服务器
@@ -121,26 +121,29 @@ python YuanZhao.py https://dynamic-website.com --headless
 # 无头浏览器 + 延长等待时间
 python YuanZhao.py https://heavy-js-website.com --headless --js-wait 10
 
+# 无头浏览器超时时间
+python YuanZhao.py https://example.com --headless --headless-timeout 120
+
 # 自定义关键字检测
 python YuanZhao.py /path/to/target --keyword-file custom_keywords.txt
 
 # 基础模式快速扫描
-python YuanZhao.py https://example.com -m basic -d 1 -t 5
+python YuanZhao.py https://example.com -m fast -d 1 -t 5
 
 # 全部模式深度扫描
-python YuanZhao.py /path/to/important-site -m all -d 3 -f html --verbose
+python YuanZhao.py /path/to/important-site -m deep -d 3 -f html --verbose
 ```
 
 #### 5. 特定场景优化命令
 ```bash
 # 应急响应场景
-python YuanZhao.py /compromised/webroot -m all -f html -o incident_response --keyword-file malware_keywords.txt --verbose
+python YuanZhao.py /compromised/webroot -m deep -f html -o incident_response --keyword-file malware_keywords.txt --verbose
 
 # 定期安全审计
-python YuanZhao.py /path/to/webroot -d 3 -m advanced -f json -o weekly_scan_$(date +%Y%m%d)
+python YuanZhao.py /path/to/webroot -d 3 -m standard -f json -o weekly_scan_$(date +%Y%m%d)
 
 # 新闻页面专项扫描
-python YuanZhao.py https://example.com/news -m all -d 1 -t 8 --verbose
+python YuanZhao.py https://example.com/news -m deep -d 1 -t 8 --verbose
 
 # 大规模并行扫描
 python YuanZhao.py /large/website -d 2 -t 20 --exclude "*.zip" "*.rar" "backup/*"
@@ -167,7 +170,7 @@ phishing,phishing,9
 ### 基本参数
 - `target`: 扫描目标（文件路径、目录路径或URL）- 必需参数
 - `-d, --depth`: 递归扫描深度（默认：3，0表示仅扫描当前文件/目录）
-- `-m, --mode`: 扫描模式（basic/advanced/all，默认：all）
+- `-m, --mode`: 扫描模式（fast/standard/deep，默认：deep）
 - `-t, --threads`: 并发线程数（默认：8）
 
 ### 报告相关参数
@@ -175,8 +178,8 @@ phishing,phishing,9
 - `-f, --format`: 报告格式（txt/html/json/csv，默认：txt）
 
 ### 网络相关参数
-- `--timeout`: 请求超时时间（秒，默认：30）
-- `--proxy`: 代理设置
+- `--timeout`: 请求超时时间（秒，默认：30）。公网目标默认使用此值，内网目标未显式设置 `internal_timeout` 时按较长超时（约为全局超时的两倍）。
+- `--proxy`: 代理设置（支持带认证与不带认证的HTTP代理），示例：`http://127.0.0.1:8080` 或 `http://user:pass@host:8080`
 
 ### 高级参数
 - `--keyword-file`: 自定义关键字文件路径
@@ -188,6 +191,7 @@ phishing,phishing,9
 - `--headless`: 启用无头浏览器扫描
 - `--browser-type`: 无头浏览器类型（支持: chrome，默认: chrome）
 - `--js-wait`: JavaScript执行等待时间（秒，默认: 3）
+- `--headless-timeout`: 无头浏览器超时时间（秒，默认: 60）
 
 ## 常见问题解答
 
@@ -195,7 +199,7 @@ phishing,phishing,9
 A: 可以通过创建自定义关键字文件调整特定关键词的风险权重来减少误报，或结合扫描模式选择更精确的扫描策略。
 
 **Q: 如何提高大型网站的扫描效率？**
-A: 增加线程数、设置合理的爬取深度，或先使用basic模式进行初步筛选。对于公网网站，建议控制扫描范围。
+A: 增加线程数、设置合理的爬取深度，或先使用基础模式（`fast`）进行初步筛选。对于公网网站，建议控制扫描范围。
 
 **Q: 为什么有些动态生成的链接没被检测到？**
 A: 启用无头浏览器模式`--headless`并适当增加JavaScript执行等待时间`--js-wait`。

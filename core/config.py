@@ -22,6 +22,7 @@ class Config:
         self.internal_timeout = 60  # 内网URL超时时间（秒）
         self.external_timeout = 30  # 公网URL超时时间（秒）
         self.proxy = None
+        self.exclude = []
         
         # 关键字配置
         self.keywords_file = None
@@ -42,6 +43,8 @@ class Config:
         self.headless_browser = 'chrome'  # 无头浏览器类型
         self.js_wait_time = 3  # JavaScript执行等待时间（秒）
         self.headless_timeout = 60  # 无头浏览器超时时间（秒）
+        self.headless_auto_download = False  # 是否自动下载驱动
+        self.headless_driver_path = None  # 本地驱动路径
         
         # 文件类型配置
         self.html_extensions = ['.html', '.htm', '.shtml', '.xhtml', '.php', '.asp', '.aspx', '.jsp']
@@ -64,6 +67,8 @@ class Config:
         
         # 根据扫描模式调整配置
         self._set_mode_config()
+        # 计算当前模式下需要扫描的扩展名
+        self.file_extensions = self.get_file_extensions_to_scan()
     
     def _set_mode_config(self):
         """根据扫描模式设置相应的配置"""
@@ -80,7 +85,7 @@ class Config:
             self.scan_steganography = False
             self.scan_special_hiding = False
             self.scan_keywords = True
-            
+        
         elif self.scan_mode == 'standard':
             # 标准模式：进行大部分扫描
             self.scan_html = True
@@ -94,7 +99,7 @@ class Config:
             self.scan_steganography = False
             self.scan_special_hiding = True
             self.scan_keywords = True
-            
+        
         elif self.scan_mode == 'deep':
             # 深度模式：进行所有扫描
             self.scan_html = True
@@ -108,6 +113,8 @@ class Config:
             self.scan_steganography = True
             self.scan_special_hiding = True
             self.scan_keywords = True
+        # 同步更新扩展名列表
+        self.file_extensions = self.get_file_extensions_to_scan()
     
     def update_mode(self, mode):
         """更新扫描模式"""

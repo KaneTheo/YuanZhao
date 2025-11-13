@@ -5,10 +5,7 @@ JavaScript检测器模块
 """
 
 import re
-import json
 from typing import List, Dict, Any
-import jsbeautifier
-from collections import Counter
 
 from utils.js_utils import (
     extract_suspicious_patterns,
@@ -176,28 +173,15 @@ class JSDetector:
         """
         results = []
         
-        # 使用js_utils中的函数提取函数调用
-        function_calls = extract_function_calls(content)
-        
-        for func_call in function_calls:
-            func_name = func_call['name']
-            args = func_call['arguments']
-            pos = func_call['position']
-            
-            # 检查是否为高危函数
-            if func_name in self.high_risk_functions:
+        for func_name in self.high_risk_functions.keys():
+            calls = extract_function_calls(content, func_name)
+            for func_call in calls:
+                args_str = func_call.get('arguments', '')
+                pos = func_call.get('position', (0, 0))
                 risk_level = self.high_risk_functions[func_name]
-                
-                # 分析函数参数，增加风险等级
-                args_str = ''.join(args)
-                
-                # 如果参数包含可疑内容，增加风险
                 if any(pattern.search(args_str) for pattern in self.obfuscation_patterns.values()):
                     risk_level = min(5, risk_level + 1)
-                
-                # 获取上下文
                 context = get_context(content, pos[0], pos[1], 100)
-                
                 result = {
                     'type': 'high_risk_function',
                     'file_path': file_path,

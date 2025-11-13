@@ -73,8 +73,10 @@ class Reporter:
                 f.write("----------------------------------------\n\n")
                 
                 for i, link in enumerate(results['suspicious_links'], 1):
-                    f.write(f"[{i}] 链接: {link.get('link', 'N/A')}\n")
-                    f.write(f"    来源: {link.get('source', 'N/A')}\n")
+                    link_val = link.get('link') or link.get('url', 'N/A')
+                    source_val = link.get('source') or link.get('file_path', 'N/A')
+                    f.write(f"[{i}] 链接: {link_val}\n")
+                    f.write(f"    来源: {source_val}\n")
                     f.write(f"    类型: {link.get('type', 'N/A')}\n")
                     f.write(f"    检测方式: {link.get('detection_method', 'N/A')}\n")
                     f.write(f"    风险等级: {link.get('risk_level', 'N/A')}\n")
@@ -270,15 +272,21 @@ class Reporter:
             for i, link in enumerate(results['suspicious_links'], 1):
                 risk_class = self._get_risk_class(link.get('risk_level', ''))
                 # 获取问题详情，如果有日志中的信息就使用
-                context_info = link.get('context', '')[:100] + '...'
-                if suspicious_link_details and i <= len(suspicious_link_details):
-                    context_info = f"从日志中检测到: {suspicious_link_details[i-1]}"
+                context_info = (link.get('context', '')[:100] + '...') if link.get('context') else ''
+                link_val = link.get('link') or link.get('url', 'N/A')
+                source_val = link.get('source') or link.get('file_path', 'N/A')
+                if suspicious_link_details:
+                    # 仅在日志中有完全匹配的链接时使用日志上下文
+                    for detail in suspicious_link_details:
+                        if link_val and detail and link_val in detail:
+                            context_info = f"从日志中检测到: {detail}"
+                            break
                 
                 html_content += f"""
                     <tr>
                         <td>{i}</td>
-                        <td>{link.get('link', 'N/A')}</td>
-                        <td>{link.get('source', 'N/A')}</td>
+                        <td>{link_val}</td>
+                        <td>{source_val}</td>
                         <td>{link.get('type', 'N/A')}</td>
                         <td>{link.get('detection_method', 'N/A')}</td>
                         <td class="{risk_class}">{link.get('risk_level', 'N/A')}</td>
@@ -386,7 +394,8 @@ class Reporter:
             },
             'statistics': {
                 'suspicious_links_count': len(results.get('suspicious_links', [])),
-                'keyword_matches_count': len(results.get('keyword_matches', []))
+                'keyword_matches_count': len(results.get('keyword_matches', [])),
+                'total_issues': results.get('total_issues', 0)
             },
             'suspicious_links': results.get('suspicious_links', []),
             'keyword_matches': results.get('keyword_matches', [])
@@ -466,12 +475,14 @@ class Reporter:
     def _read_log_file(self):
         """读取对应的log文件内容，确保完整读取所有日志"""
         try:
+            if not getattr(self.config, 'debug', False):
+                return "日志读取未启用（非调试模式）"
             # 添加导入
             import time
-            import io
             
             # 直接使用固定路径方法，先检查reports目录下是否存在最新的日志文件
-            reports_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'reports')
+            # 优先使用报告所在目录作为日志目录
+            reports_dir = os.path.dirname(self.config.report_file) or os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'reports')
             
             # 查找reports目录下所有日志文件
             if os.path.exists(reports_dir):

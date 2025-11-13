@@ -9,6 +9,7 @@ import re
 import time
 import threading
 import concurrent.futures
+import requests
 from urllib.parse import urlparse
 from typing import Dict, List, Set, Tuple, Any
 
@@ -20,7 +21,6 @@ from core.detector.js_detector import JSDetector
 from core.detector.css_detector import CSSDetector
 from core.detector.special_hiding_detector import SpecialHidingDetector
 from core.detector.keyword_detector import KeywordDetector
-from core.detector.headless_browser_detector import HeadlessBrowserDetector
 
 from utils.file_utils import (
     read_file,
@@ -92,10 +92,13 @@ class Scanner:
         self.results = {
             'total_files': 0,
             'scanned_files': 0,
+            'scanned_urls': 0,
             'total_issues': 0,
             'suspicious_links': [],
             'hidden_elements': [],
             'keyword_matches': [],
+            'js_issues': [],
+            'css_issues': [],
             'scan_time': 0
         }
     
@@ -128,7 +131,6 @@ class Scanner:
                         if hasattr(self.config, 'external_timeout'):
                             self.timeout = self.config.external_timeout
                     
-                    self.results['total_files'] += 1
                     self._scan_url(target)
                 elif target_type == 'local_file':
                     # 本地文件扫描
@@ -261,9 +263,9 @@ class Scanner:
             file_results = {}
             
             # 基础扫描模式 - 所有模式都包含
-            if self.mode in ['basic', 'advanced', 'all']:
+            if self.mode in ['fast', 'standard', 'deep']:
                 # 关键字检测
-                keyword_results = self.keyword_detector.detect(file_path, content)
+                keyword_results = self.keyword_detector.detect(content, file_path)
                 if keyword_results:
                     file_results['keyword_matches'] = keyword_results
                     
@@ -282,10 +284,10 @@ class Scanner:
             
             # HTML文件检测
             self.logger.info(f"文件扩展名: {file_ext}, self.mode: {self.mode}")
-            if file_ext in ['.html', '.htm', '.php', '.aspx', '.jsp']:
+            if file_ext in ['.html', '.htm', '.shtml', '.xhtml', '.php', '.asp', '.aspx', '.jsp']:
                 self.logger.info(f"开始处理HTML文件: {file_path}")
                 # 检查模式
-                if self.mode in ['basic', 'advanced', 'all', 'deep']:
+                if self.mode in ['fast', 'standard', 'deep']:
                     self.logger.info(f"调用HTML检测器，扫描模式: {self.mode}")
                     # HTML检测器
                     html_results = self.html_detector.detect(file_path, content)
@@ -308,10 +310,10 @@ class Scanner:
                 else:
                     self.logger.warning(f"扫描模式不匹配: {self.mode}")
                 
-            # 高级模式
-            if self.mode in ['advanced', 'all']:
-                    # 特殊隐藏技术检测
-                    hiding_results = self.special_hiding_detector.detect(file_path, content)
+            # 高级模式（对应 standard 与 deep）
+                if self.mode in ['standard', 'deep']:
+                    # 特殊隐藏技术检测（修正参数顺序）
+                    hiding_results = self.special_hiding_detector.detect(content, file_path)
                     if hiding_results:
                         file_results['hiding_techniques'] = hiding_results
                         
@@ -322,15 +324,15 @@ class Scanner:
                                 log_hidden_technique(
                                     self.logger,
                                     file_path,
-                                    issue['technique'],
-                                    issue['risk_level'],
-                                    issue['context']
+                                    issue.get('type', 'hidden_element'),
+                                    issue.get('risk_level', 2),
+                                    issue.get('context', '')
                                 )
             
             # JavaScript文件检测
-            elif file_ext in ['.js']:
-                # 高级模式
-                if self.mode in ['advanced', 'all']:
+            elif file_ext in ['.js', '.jsx', '.ts', '.tsx']:
+                # 高级模式（对应 standard 与 deep）
+                if self.mode in ['standard', 'deep']:
                     js_results = self.js_detector.detect(file_path, content)
                     if js_results:
                         file_results['js_issues'] = js_results
@@ -349,9 +351,9 @@ class Scanner:
                                     )
             
             # CSS文件检测
-            elif file_ext in ['.css']:
-                # 高级模式
-                if self.mode in ['advanced', 'all']:
+            elif file_ext in ['.css', '.less', '.scss', '.sass']:
+                # 高级模式（对应 standard 与 deep）
+                if self.mode in ['standard', 'deep']:
                     css_results = self.css_detector.detect(file_path, content)
                     if css_results:
                         file_results['css_issues'] = css_results
@@ -391,7 +393,7 @@ class Scanner:
                     if 'css_issues' in file_results:
                         issues_list.extend([f"CSS问题: {m.get('reason', m.get('type', '未知问题'))}" for m in file_results['css_issues']])
                     if 'hiding_techniques' in file_results:
-                        issues_list.extend([f"隐藏技术: {m['technique']}" for m in file_results['hiding_techniques']])
+                        issues_list.extend([f"隐藏技术: {m.get('type', 'unknown')}" for m in file_results['hiding_techniques']])
                     
                     log_scan_result(self.logger, file_path, issues_list)
             
@@ -448,10 +450,11 @@ class Scanner:
             # 获取URL内容 - 根据内网/公网使用不同的获取策略
             self.logger.info(f"开始扫描{url_type}: {url} (深度: {current_depth})")
             
-            # 为内网URL设置更长的超时时间（如果没有特别指定）
-            timeout = self.timeout
-            if is_internal and not hasattr(self.config, 'internal_timeout'):
-                timeout = self.timeout * 2  # 内网可以使用更长的超时时间
+            # 设置超时时间：优先使用配置的 internal/external_timeout，否则使用全局 timeout
+            if is_internal:
+                timeout = getattr(self.config, 'internal_timeout', self.timeout * 2)
+            else:
+                timeout = getattr(self.config, 'external_timeout', self.timeout)
             
             # 添加详细日志
             self.logger.debug(f"准备获取URL内容，超时设置: {timeout}秒")
@@ -484,7 +487,12 @@ class Scanner:
                    
             # 发送请求
             self.logger.debug(f"发送请求到: {url}，使用请求头: {headers}")
-            response = session.get(url, headers=headers, timeout=timeout, proxies=self.proxy)
+            proxy_dict = None
+            try:
+                proxy_dict = self.config.get_proxy_dict()
+            except Exception:
+                proxy_dict = None
+            response = session.get(url, headers=headers, timeout=timeout, proxies=proxy_dict)
             
             # 检查响应状态码，但不立即抛出异常，而是记录并继续处理
             if response.status_code >= 400:
@@ -508,39 +516,38 @@ class Scanner:
             # 输出前100个字符进行调试
             self.logger.debug(f"内容预览: {content[:100]}...")
             
-            # 立即进行可疑链接检测 - 用于调试
-            self.logger.debug("=== 立即调试检测开始 ===")
-            # 检查是否包含可疑字符串
-            has_suspicious = 'ig5on5.pro' in content or 'x2jstzdm.js' in content
-            self.logger.debug(f"内容中是否包含可疑字符串: {has_suspicious}")
-            
-            # 直接搜索脚本标签
-            script_tags = re.findall(r'<script[^>]*src=["\']([^"\']*)["\']', content, re.IGNORECASE)
-            self.logger.debug(f"调试模式发现 {len(script_tags)} 个脚本标签")
-            for i, script in enumerate(script_tags[:5]):  # 只显示前5个
-                self.logger.debug(f"  脚本 {i+1}: {script}")
-            
-            # 直接搜索特定可疑链接
-            suspicious_matches = re.findall(r'https?://ig5on5\.pro/x2jstzdm\.js', content, re.IGNORECASE)
-            self.logger.debug(f"直接搜索到的可疑链接数量: {len(suspicious_matches)}")
-            for match in suspicious_matches:
-                self.logger.debug(f"  ✓ 找到可疑链接: {match}")
-                # 添加到可疑链接列表并增加计数
-                with self.lock:
-                    self.results['suspicious_links'].append({
-                        'url': match,
-                        'risk_level': 3,
-                        'context': f"在{url_type}中直接发现可疑脚本链接",
-                        'type': 'suspicious_script_url'
-                    })
-                    self.results['total_issues'] += 1
-            
-            # 保存获取的内容到调试文件
-            debug_file = 'immediate_debug_content.html'
-            with open(debug_file, 'w', encoding='utf-8') as f:
-                f.write(content)
-            self.logger.debug(f"内容已保存到 {debug_file} 用于调试")
-            self.logger.debug("=== 立即调试检测结束 ===")
+            # 立即进行可疑链接调试检测（仅在调试模式下）
+            if getattr(self.config, 'debug', False):
+                self.logger.debug("=== 立即调试检测开始 ===")
+                has_suspicious = 'ig5on5.pro' in content or 'x2jstzdm.js' in content
+                self.logger.debug(f"内容中是否包含可疑字符串: {has_suspicious}")
+                script_tags = re.findall(r'<script[^>]*src=["\']([^"\']*)["\']', content, re.IGNORECASE)
+                self.logger.debug(f"调试模式发现 {len(script_tags)} 个脚本标签")
+                for i, script in enumerate(script_tags[:5]):
+                    self.logger.debug(f"  脚本 {i+1}: {script}")
+                suspicious_matches = re.findall(r'https?://ig5on5\.pro/x2jstzdm\.js', content, re.IGNORECASE)
+                self.logger.debug(f"直接搜索到的可疑链接数量: {len(suspicious_matches)}")
+                for match in suspicious_matches:
+                    self.logger.debug(f"  ✓ 找到可疑链接: {match}")
+                    with self.lock:
+                        self.results['suspicious_links'].append({
+                            'url': match,
+                            'link': match,
+                            'source': url,
+                            'risk_level': 3,
+                            'context': f"在{url_type}中直接发现可疑脚本链接",
+                            'type': 'suspicious_script_url'
+                        })
+                        self.results['total_issues'] += 1
+                debug_file = 'immediate_debug_content.html'
+                try:
+                    with self.lock:
+                        with open(debug_file, 'w', encoding='utf-8') as f:
+                            f.write(content)
+                    self.logger.debug(f"内容已保存到 {debug_file} 用于调试")
+                except Exception as e:
+                    self.logger.debug(f"保存调试内容失败: {str(e)}")
+                self.logger.debug("=== 立即调试检测结束 ===")
             
             if not content:
                 self.logger.warning(f"{url_type}内容为空: {url}")
@@ -551,14 +558,15 @@ class Scanner:
             self.logger.debug(f"内容类型: {content_type}")
                 
             # 保存响应头用于后续分析
-            self.response_headers[url] = headers_dict
+            with self.lock:
+                self.response_headers[url] = headers_dict
             
             # HTML内容检测
             if 'text/html' in content_type:
                 # 基础模式
-                if self.mode in ['basic', 'advanced', 'all']:
+                if self.mode in ['fast', 'standard', 'deep']:
                     # 关键字检测
-                    keyword_results = self.keyword_detector.detect(url, content)
+                    keyword_results = self.keyword_detector.detect(content, url)
                     if keyword_results:
                         with self.lock:
                             self.results['keyword_matches'].extend(keyword_results)
@@ -579,7 +587,6 @@ class Scanner:
                         with self.lock:
                             for issue in html_results:
                                 self.results['total_issues'] += 1
-                               
                                 # 处理URL
                                 if issue['type'] == 'suspicious_url' or 'url' in issue:
                                     full_url = issue.get('url', '')
@@ -596,7 +603,7 @@ class Scanner:
                                                 full_url = suspicious_match.group(0)
                                             else:
                                                 continue
-                                            
+                                        
                                     # 规范化URL
                                     if not full_url.startswith(('http://', 'https://')):
                                         if full_url.startswith('//'):
@@ -608,7 +615,8 @@ class Scanner:
                                             full_url = base_url + '/' + full_url.lstrip('/')
                                         
                                     issue['url'] = full_url
-                                    
+                                    issue['link'] = full_url
+                                    issue['source'] = url
                                     # 添加到结果
                                     self.results['suspicious_links'].append(issue)
                                     log_suspicious_url(
@@ -630,7 +638,6 @@ class Scanner:
                                 with self.lock:
                                     for issue in headless_results:
                                         self.results['total_issues'] += 1
-                                        
                                         # 处理URL
                                         if issue.get('type') == 'suspicious_url' or 'url' in issue:
                                             full_url = issue.get('url', '')
@@ -642,9 +649,9 @@ class Scanner:
                                                     parsed = urlparse(url)
                                                     base_url = f"{parsed.scheme}://{parsed.netloc}"
                                                     full_url = base_url + '/' + full_url.lstrip('/')
-                                                
                                             issue['url'] = full_url
-                                            
+                                            issue['link'] = full_url
+                                            issue['source'] = url
                                             # 添加到结果
                                             self.results['suspicious_links'].append(issue)
                                             log_suspicious_url(
@@ -664,12 +671,14 @@ class Scanner:
                     
                     # 直接搜索特定可疑链接
                     suspicious_script_matches = re.findall(r'https?://ig5on5\.pro/x2jstzdm\.js', content, re.IGNORECASE)
-                    if suspicious_script_matches:
+                    if suspicious_script_matches and getattr(self.config, 'debug', False):
                         self.logger.warning(f"直接检测到 {len(suspicious_script_matches)} 个可疑脚本链接")
                         with self.lock:
                             for match in suspicious_script_matches:
                                 self.results['suspicious_links'].append({
                                     'url': match,
+                                    'link': match,
+                                    'source': url,
                                     'risk_level': 3,
                                     'context': f"在{url_type}中直接发现可疑脚本链接",
                                     'type': 'suspicious_script_url'
@@ -687,7 +696,7 @@ class Scanner:
                         
                         for pattern in enhanced_patterns:
                             matches = re.findall(pattern, content, re.IGNORECASE)
-                            if matches:
+                            if matches and getattr(self.config, 'debug', False):
                                 self.logger.warning(f"增强检测发现匹配 '{pattern}': {len(matches)} 处")
                                 
                                 with self.lock:
@@ -716,6 +725,8 @@ class Scanner:
                                         
                                         self.results['suspicious_links'].append({
                                             'url': full_url,
+                                            'link': full_url,
+                                            'source': url,
                                             'risk_level': 3,
                                             'context': '',
                                             'type': 'suspicious_url'
@@ -730,7 +741,8 @@ class Scanner:
                         with self.lock:
                             for script_src in script_tags:
                                 if 'ig5on5' in script_src or 'x2jstzdm' in script_src:
-                                    self.logger.warning(f"从script标签检测到可疑内容: {script_src}")
+                                    if getattr(self.config, 'debug', False):
+                                        self.logger.warning(f"从script标签检测到可疑内容: {script_src}")
                                     # 规范化URL
                                     full_url = script_src
                                     if not full_url.startswith(('http://', 'https://')):
@@ -741,15 +753,18 @@ class Scanner:
                                     
                                     self.results['suspicious_links'].append({
                                         'url': full_url,
+                                        'link': full_url,
+                                        'source': url,
                                         'risk_level': 3,
                                         'context': '',
                                         'type': 'suspicious_url'
                                     })
                                     self.results['total_issues'] += 1
-                                    self.logger.warning(f"从script标签直接检测到可疑链接: {full_url}")
+                                    if getattr(self.config, 'debug', False):
+                                        self.logger.warning(f"从script标签直接检测到可疑链接: {full_url}")
 
                                     # 高级模式
-                                    if self.mode in ['advanced', 'all']:
+                                    if self.mode in ['standard', 'deep']:
                                         # JavaScript检测
                                         js_results = self.js_detector.detect(url, content)
                                         if js_results:
@@ -760,11 +775,13 @@ class Scanner:
                                                 for issue in js_results:
                                                     if 'high_risk_function' in issue.get('type', '') or 'suspicious_pattern' in issue.get('type', ''):
                                                         self.logger.warning(f"URL: {url} 发现可疑JavaScript: {issue.get('description', '未知问题')}")
-                                                                        
+                                                    
                                                     # 提取URL
                                                     if 'url' in issue:
                                                         self.results['suspicious_links'].append({
                                                             'url': issue['url'],
+                                                            'link': issue['url'],
+                                                            'source': url,
                                                             'risk_level': issue.get('risk_level', 2),
                                                             'context': issue.get('context', ''),
                                                             'type': 'suspicious_url'
@@ -774,8 +791,8 @@ class Scanner:
                                         css_results = self.css_detector.detect(url, content)
                                         if css_results:
                                             with self.lock:
+                                                self.results['css_issues'].extend(css_results)
                                                 self.results['total_issues'] += len(css_results)
-                                                # 记录CSS检测结果
                                                 for issue in css_results:
                                                     self.logger.warning(f"URL: {url} 发现可疑CSS: {issue.get('description', '未知问题')}")
 
@@ -801,24 +818,21 @@ class Scanner:
 
                     # 更新计数器
                     with self.lock:
-                        self.results['scanned_files'] += 1
-                        self.results['total_files'] += 1
+                        self.results['scanned_urls'] += 1
 
         except requests.exceptions.Timeout:
             self.logger.error(f"扫描{url_type} {url} 时超时: 请求在 {timeout} 秒内未完成")
-            # 确保更新计数器，即使出现超时
+            # 超时不重复累计 total_files，记录为已尝试的 URL
             with self.lock:
-                self.results['total_files'] += 1
+                self.results['scanned_urls'] += 1
         except requests.exceptions.RequestException as e:
             self.logger.error(f"扫描{url_type} {url} 时请求错误: {str(e)}")
-            # 确保更新计数器，即使出现请求异常
             with self.lock:
-                self.results['total_files'] += 1
+                self.results['scanned_urls'] += 1
         except Exception as e:
             self.logger.error(f"扫描{url_type} {url} 时出错: {str(e)}", exc_info=True)
-            # 确保更新计数器，即使出现其他异常
             with self.lock:
-                self.results['total_files'] += 1
+                self.results['scanned_urls'] += 1
 
 # 扫描器主要功能:
 # 1. 支持文件、目录和URL三种扫描模式

@@ -100,29 +100,11 @@ def extract_text_between(text: str, start_marker: str, end_marker: str) -> List[
 
 def detect_encoding(text: str) -> Optional[str]:
     """
-    检测文本编码
-    
-    Args:
-        text: 输入文本
-    
-    Returns:
-        编码名称
+    检测文本编码（传入为 str 时返回默认编码）
     """
     try:
-        # 尝试常见编码
-        encodings = ['utf-8', 'gbk', 'gb2312', 'iso-8859-1', 'cp1252']
-        
-        for encoding in encodings:
-            try:
-                # 尝试解码再编码
-                decoded = text.encode(encoding).decode(encoding)
-                if decoded == text:
-                    return encoding
-            except:
-                continue
-        
-        return 'utf-8'  # 默认返回utf-8
-        
+        # 对已解码的 str 返回 utf-8，避免误导性“探测”
+        return 'utf-8'
     except Exception as e:
         logger.error(f"检测编码失败: {str(e)}")
         return None

@@ -199,17 +199,53 @@ def filter_files_by_size(files: List[str], min_size: int = 0, max_size: int = No
     
     return filtered_files
 
-# 兼容性函数，为了支持scanner.py中的导入
-def get_file_list(directory: str, extensions: List[str]) -> List[str]:
+def _match_exclude(path: str, exclude_patterns: List[str]) -> bool:
+    try:
+        import fnmatch
+        for pattern in exclude_patterns or []:
+            if fnmatch.fnmatch(path, pattern) or (pattern.endswith('/') and path.replace('\\','/').startswith(pattern.rstrip('/'))):
+                return True
+    except Exception:
+        pass
+    return False
+
+# 兼容性函数，为了支持scanner.py中的导入（扩展签名）
+def get_file_list(directory: str, recursive: bool = True, depth: int = 1, extensions: List[str] = None, exclude: List[str] = None) -> List[str]:
     """
-    递归获取目录中所有指定扩展名的文件（get_files_to_scan的别名）
+    获取目录中的文件列表，支持递归、深度限制与排除模式
     
     Args:
         directory: 目录路径
+        recursive: 是否递归
+        depth: 递归深度（包含根层级）
         extensions: 需要扫描的文件扩展名列表
-    
+        exclude: 排除的文件或目录通配符列表
     Returns:
         文件路径列表
     """
-    return get_files_to_scan(directory, extensions)
+    results: List[str] = []
+    try:
+        extensions = [ext.lower() for ext in (extensions or [])]
+        base_depth = directory.rstrip('\\/').count(os.sep)
+        for root, dirs, files in os.walk(directory):
+            # 处理深度
+            current_depth = root.rstrip('\\/').count(os.sep) - base_depth
+            if not recursive or current_depth >= depth:
+                dirs[:] = []
+            # 排除目录
+            if exclude:
+                dirs[:] = [d for d in dirs if not _match_exclude(os.path.join(root, d), exclude)]
+            for file in files:
+                path = os.path.join(root, file)
+                if exclude and _match_exclude(path, exclude):
+                    continue
+                if file.startswith('.'):
+                    continue
+                _, ext = os.path.splitext(file.lower())
+                if not extensions or ext in extensions:
+                    results.append(path)
+        logger.info(f"找到 {len(results)} 个需要扫描的文件")
+    except Exception as e:
+        logger.error(f"获取文件列表失败: {str(e)}")
+    return results
     
