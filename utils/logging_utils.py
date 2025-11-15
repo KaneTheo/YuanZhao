@@ -119,8 +119,23 @@ def log_scan_result(logger, file_path, issues):
     """
     if issues:
         logger.warning(f"文件 {file_path} 发现 {len(issues)} 个问题")
-        for issue in issues:
-            logger.warning(f"  - {issue}")
+        import logging as _logging
+        if logger.level <= _logging.DEBUG:
+            for issue in issues:
+                logger.warning(f"  - {issue}")
+        else:
+            # 聚合重复项，仅输出前若干项
+            counts = {}
+            for issue in issues:
+                counts[issue] = counts.get(issue, 0) + 1
+            shown = 0
+            for text, cnt in counts.items():
+                logger.warning(f"  - {text} x{cnt}")
+                shown += 1
+                if shown >= 8:
+                    break
+            if len(counts) > shown:
+                logger.warning(f"  ... 还有 {len(counts) - shown} 项未展示（非verbose模式）")
     else:
         logger.debug(f"文件 {file_path} 未发现问题")
 

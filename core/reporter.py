@@ -9,6 +9,18 @@ import json
 import csv
 import logging
 from datetime import datetime
+
+def _escape_html(s: str) -> str:
+    if s is None:
+        return ''
+    return (
+        str(s)
+        .replace('&', '&amp;')
+        .replace('<', '&lt;')
+        .replace('>', '&gt;')
+        .replace('"', '&quot;')
+        .replace("'", '&#39;')
+    )
 from typing import Dict, List
 
 logger = logging.getLogger('YuanZhao.reporter')
@@ -119,6 +131,7 @@ class Reporter:
         # 读取对应的log文件内容
         log_content = self._read_log_file()
         
+        
         html_content = f"""
 <!DOCTYPE html>
 <html lang="zh-CN">
@@ -222,8 +235,8 @@ class Reporter:
     <div class="summary">
         <h2>扫描概览</h2>
         <p><strong>扫描时间:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
-        <p><strong>扫描目标:</strong> {self.config.target}</p>
-        <p><strong>扫描模式:</strong> {self.config.scan_mode}</p>
+        <p><strong>扫描目标:</strong> {_escape_html(self.config.target)}</p>
+        <p><strong>扫描模式:</strong> {_escape_html(self.config.scan_mode)}</p>
         <p><strong>扫描耗时:</strong> {duration}</p>
         <p><strong>扫描文件数:</strong> {results.get('scanned_files', 0)}</p>
         <p><strong>扫描URL数:</strong> {results.get('scanned_urls', 0)}</p>
@@ -246,6 +259,7 @@ class Reporter:
                         <th>序号</th>
                         <th>链接</th>
                         <th>来源</th>
+                        <th>来源类型</th>
                         <th>类型</th>
                         <th>检测方式</th>
                         <th>风险等级</th>
@@ -253,7 +267,7 @@ class Reporter:
                     </tr>
                 </thead>
                 <tbody>
-"""
+            """
             
             # 读取日志内容以提取问题详情
             log_content = self._read_log_file()
@@ -273,13 +287,18 @@ class Reporter:
                 risk_class = self._get_risk_class(link.get('risk_level', ''))
                 # 获取问题详情，如果有日志中的信息就使用
                 context_info = (link.get('context', '')[:100] + '...') if link.get('context') else ''
-                link_val = link.get('link') or link.get('url', 'N/A')
-                source_val = link.get('source') or link.get('file_path', 'N/A')
+                # 优先显示规范URL；无URL时展示动态表达式短摘
+                display_value = link.get('link') or link.get('url')
+                if not display_value and link.get('expression'):
+                    display_value = (link['expression'][:100] + '...')
+                link_val = _escape_html(display_value or 'N/A')
+                source_val = _escape_html(link.get('source') or link.get('file_path', 'N/A'))
+                source_type_val = _escape_html(link.get('context_type', 'N/A'))
                 if suspicious_link_details:
                     # 仅在日志中有完全匹配的链接时使用日志上下文
                     for detail in suspicious_link_details:
                         if link_val and detail and link_val in detail:
-                            context_info = f"从日志中检测到: {detail}"
+                            context_info = f"从日志中检测到: {_escape_html(detail)}"
                             break
                 
                 html_content += f"""
@@ -287,12 +306,13 @@ class Reporter:
                         <td>{i}</td>
                         <td>{link_val}</td>
                         <td>{source_val}</td>
-                        <td>{link.get('type', 'N/A')}</td>
-                        <td>{link.get('detection_method', 'N/A')}</td>
+                        <td>{source_type_val}</td>
+                        <td>{_escape_html(link.get('type', 'N/A'))}</td>
+                        <td>{_escape_html(link.get('detection_method', 'N/A'))}</td>
                         <td class="{risk_class}">{link.get('risk_level', 'N/A')}</td>
-                        <td><div class="context">{context_info}</div></td>
+                        <td><div class="context">{_escape_html(context_info)}</div></td>
                     </tr>
-"""
+                """
             
             html_content += """
                 </tbody>
@@ -326,11 +346,11 @@ class Reporter:
                 html_content += f"""
                     <tr>
                         <td>{i}</td>
-                        <td>{match.get('keyword', 'N/A')}</td>
-                        <td>{match.get('category', 'N/A')}</td>
+                        <td>{_escape_html(match.get('keyword', 'N/A'))}</td>
+                        <td>{_escape_html(match.get('category', 'N/A'))}</td>
                         <td class="{risk_class}">{match.get('weight', 'N/A')}</td>
-                        <td>{match.get('source', 'N/A')}</td>
-                        <td><div class="context">{match.get('context', '')[:100]}...</div></td>
+                        <td>{_escape_html(match.get('source', 'N/A'))}</td>
+                        <td><div class="context">{_escape_html((match.get('context', '') or '')[:100])}...</div></td>
                     </tr>
 """
             
@@ -380,6 +400,15 @@ class Reporter:
     
     def _generate_json_report(self, results: Dict, duration):
         """生成JSON报告"""
+        # 丰富context_type字段，保持结构化输出一致性
+        enriched_links = []
+        for link in results.get('suspicious_links', []):
+            item = dict(link)
+            if 'context_type' not in item:
+                item['context_type'] = 'N/A'
+            if 'source_tag' not in item:
+                item['source_tag'] = item.get('source_tag', 'N/A')
+            enriched_links.append(item)
         report_data = {
             'report_info': {
                 'tool': '渊照暗链扫描工具',
@@ -397,7 +426,7 @@ class Reporter:
                 'keyword_matches_count': len(results.get('keyword_matches', [])),
                 'total_issues': results.get('total_issues', 0)
             },
-            'suspicious_links': results.get('suspicious_links', []),
+            'suspicious_links': enriched_links,
             'keyword_matches': results.get('keyword_matches', [])
         }
         
@@ -407,14 +436,19 @@ class Reporter:
     def _generate_csv_report(self, results: Dict, duration):
         """生成CSV报告"""
         # 先写入可疑链接
+        def _sanitize_csv_cell(val: str) -> str:
+            if val is None:
+                return ''
+            s = str(val)
+            return ("'" + s) if s and s[0] in ('=', '+', '-', '@') else s
         with open(self.config.report_file, 'w', newline='', encoding='utf-8-sig') as f:
             writer = csv.writer(f)
             
             # 写入报告信息
             writer.writerow(['渊照暗链扫描报告'])
             writer.writerow(['扫描时间', datetime.now().strftime('%Y-%m-%d %H:%M:%S')])
-            writer.writerow(['扫描目标', self.config.target])
-            writer.writerow(['扫描模式', self.config.scan_mode])
+            writer.writerow(['扫描目标', _sanitize_csv_cell(self.config.target)])
+            writer.writerow(['扫描模式', _sanitize_csv_cell(self.config.scan_mode)])
             writer.writerow(['扫描耗时', str(duration)])
             writer.writerow([])
             
@@ -424,14 +458,15 @@ class Reporter:
                 writer.writerow(['序号', '链接', '来源', '类型', '检测方式', '风险等级', '上下文'])
                 
                 for i, link in enumerate(results['suspicious_links'], 1):
+                    link_display = link.get('link', '') or link.get('url', '') or (link.get('expression', '')[:100] + '...' if link.get('expression') else '')
                     writer.writerow([
                         i,
-                        link.get('link', ''),
-                        link.get('source', ''),
-                        link.get('type', ''),
-                        link.get('detection_method', ''),
+                        _sanitize_csv_cell(link_display),
+                        _sanitize_csv_cell(link.get('source', '')),
+                        _sanitize_csv_cell(link.get('type', '')),
+                        _sanitize_csv_cell(link.get('detection_method', '')),
                         link.get('risk_level', ''),
-                        link.get('context', '')[:200]
+                        _sanitize_csv_cell((link.get('context', '') or '')[:200])
                     ])
                 writer.writerow([])
             
@@ -443,11 +478,11 @@ class Reporter:
                 for i, match in enumerate(results['keyword_matches'], 1):
                     writer.writerow([
                         i,
-                        match.get('keyword', ''),
-                        match.get('category', ''),
+                        _sanitize_csv_cell(match.get('keyword', '')),
+                        _sanitize_csv_cell(match.get('category', '')),
                         match.get('weight', ''),
-                        match.get('source', ''),
-                        match.get('context', '')[:200]
+                        _sanitize_csv_cell(match.get('source', '')),
+                        _sanitize_csv_cell((match.get('context', '') or '')[:200])
                     ])
     
     def _get_risk_class(self, risk_level):
@@ -501,13 +536,13 @@ class Reporter:
                     best_lines_count = 0
                     best_has_summary = False
                     
-                    # 大幅增加初始等待时间
-                    time.sleep(3.0)  # 增加到3秒
+                    # 初始等待时间（参数化）
+                    time.sleep((getattr(self.config, 'debug_log_wait_ms', 3000))/1000.0)
                     
                     # 检查文件大小是否稳定，表示写入完成
                     size_stable_count = 0
                     last_size = 0
-                    max_size_checks = 5  # 增加检查次数
+                    max_size_checks = int(getattr(self.config, 'debug_log_checks', 5))
                     
                     for _ in range(max_size_checks):
                         try:
@@ -522,7 +557,7 @@ class Reporter:
                             if size_stable_count >= 3:  # 文件大小连续三次稳定
                                 break
                             
-                            time.sleep(0.8)  # 增加每次检查的等待时间
+                            time.sleep((getattr(self.config, 'debug_log_interval_ms', 800))/1000.0)
                         except Exception:
                             break
                     
@@ -620,4 +655,6 @@ class Reporter:
         except Exception as e:
             logger.error(f"读取日志文件异常: {str(e)}", exc_info=True)
             return f"读取日志文件时发生错误: {str(e)}\n详细信息: {repr(e)}"
+            
+        # 局部_escape_html移除，统一使用文件顶部的全局_escape_html
             

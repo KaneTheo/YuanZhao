@@ -12,10 +12,10 @@ from utils.js_utils import (
     extract_function_calls,
     detect_dynamic_urls,
     identify_obfuscated_code,
-    detect_document_modifications,
+    detect_document_modification,
     extract_variable_assignments,
     extract_comments as js_extract_comments,
-    remove_comments as js_remove_comments
+    strip_comments as js_remove_comments
 )
 from utils.common_utils import (
     get_context,
@@ -24,7 +24,8 @@ from utils.common_utils import (
 )
 from utils.network_utils import (
     extract_urls,
-    is_external_link
+    is_external_link,
+    get_domain
 )
 
 class JSDetector:
@@ -326,31 +327,43 @@ class JSDetector:
         dynamic_urls = detect_dynamic_urls(content)
         
         for url_info in dynamic_urls:
-            # 确定风险等级
             risk_level = url_info.get('risk_level', 3)
-            
-            # 分析URL构建方式
-            if '+' in url_info['url'] or '[' in url_info['url']:
-                risk_level = min(5, risk_level + 1)
-            
-            result = {
-                'type': 'dynamic_url',
-                'file_path': file_path,
-                'url': url_info['url'],
-                'risk_level': risk_level,
-                'reason': url_info.get('reason', '动态构建的URL'),
-                'context': url_info.get('context', '')
-            }
+            raw_url = url_info.get('url')
+            expr = url_info.get('expression', '')
+            if raw_url:
+                if ('+' in raw_url) or ('[' in raw_url):
+                    risk_level = min(5, risk_level + 1)
+                result = {
+                    'type': 'dynamic_url',
+                    'file_path': file_path,
+                    'url': raw_url,
+                    'risk_level': risk_level,
+                    'reason': url_info.get('reason', '动态构建的URL'),
+                    'context': url_info.get('context', '')
+                }
+            else:
+                result = {
+                    'type': 'dynamic_expression',
+                    'file_path': file_path,
+                    'expression': expr,
+                    'risk_level': risk_level,
+                    'reason': url_info.get('reason', '动态构建的URL'),
+                    'context': url_info.get('context', '')
+                }
             results.append(result)
         
         # 提取所有URL并检测可疑URL
-        urls = extract_urls(content)
+        urls = extract_urls(content, context_type='js')
         for url_obj in urls:
             url = url_obj['url']
             context = url_obj['context']
             
             # 检测可疑URL
-            if is_external_link(url):
+            # 传入基准域用于外链判断
+            base_domain = None
+            if isinstance(file_path, str) and file_path.startswith(('http://', 'https://')):
+                base_domain = get_domain(file_path)
+            if is_external_link(url, base_domain):
                 risk_level = 3
                 reasons = []
                 
@@ -405,7 +418,7 @@ class JSDetector:
         results = []
         
         # 使用js_utils中的函数检测文档修改
-        modifications = detect_document_modifications(content)
+        modifications = detect_document_modification(content)
         
         for mod_info in modifications:
             # 确定风险等级
@@ -480,7 +493,8 @@ class JSDetector:
                              'admin', 'password', 'credential', 'phish', 'spy', 'tracking']
         
         for comment in comments:
-            comment_lower = comment.lower()
+            text = comment.get('content', '')
+            comment_lower = text.lower()
             
             # 检查是否包含可疑关键词
             for keyword in suspicious_keywords:
@@ -491,20 +505,20 @@ class JSDetector:
                         'keyword': keyword,
                         'risk_level': 3,
                         'description': f"注释中包含可疑关键词: {keyword}",
-                        'context': comment[:200] + ('...' if len(comment) > 200 else '')
+                        'context': text[:200] + ('...' if len(text) > 200 else '')
                     }
                     results.append(result)
                     break
             
             # 检查注释中是否包含Base64编码内容
             base64_pattern = re.compile(r'[A-Za-z0-9+/=]{32,}')
-            if base64_pattern.search(comment) and len(comment) > 50:
+            if base64_pattern.search(text) and len(text) > 50:
                 result = {
                     'type': 'suspicious_comment',
                     'file_path': file_path,
                     'risk_level': 4,
                     'description': "注释中包含疑似Base64编码的长字符串",
-                    'context': comment[:200] + ('...' if len(comment) > 200 else '')
+                    'context': text[:200] + ('...' if len(text) > 200 else '')
                 }
                 results.append(result)
         

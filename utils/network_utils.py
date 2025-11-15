@@ -16,13 +16,19 @@ logger = logging.getLogger('YuanZhao.utils.network')
 # 常见URL模式正则表达式
 URL_PATTERNS = [
     # 标准URL
-    re.compile(r'https?://[\w\-\.]+(?:\.[\w\-]+)+[\w\-\._~:/?#[\]@!\$&\'\(\)\*\+,;=.]+'),
+    re.compile(r'https?://[\w\-\.]+(?:\.[\w\-]+)+[\w\-\._~:/?#[\]@!\$&\'\(\)\*\+,;=.]+', re.IGNORECASE),
     # 协议相对URL
-    re.compile(r'//[\w\-\.]+(?:\.[\w\-]+)+[\w\-\._~:/?#[\]@!\$&\'\(\)\*\+,;=.]+'),
+    re.compile(r'//[\w\-\.]+(?:\.[\w\-]+)+[\w\-\._~:/?#[\]@!\$&\'\(\)\*\+,;=.]+', re.IGNORECASE),
     # 仅域名
-    re.compile(r'[a-zA-Z0-9][-a-zA-Z0-9]{0,62}(\.[a-zA-Z0-9][-a-zA-Z0-9]{0,62})+\.?'),
+    re.compile(r'[a-zA-Z0-9][-a-zA-Z0-9]{0,62}(\.[a-zA-Z0-9][-a-zA-Z0-9]{0,62})+\.?', re.IGNORECASE),
     # IP地址形式
-    re.compile(r'\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b(?::\d{1,5})?'),
+    re.compile(r'\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b(?::\d{1,5})?', re.IGNORECASE),
+    # JavaScript伪协议
+    re.compile(r'javascript:[^\s"\'>]+', re.IGNORECASE),
+    # data URI
+    re.compile(r'data:[^;]+;base64,[^\s"\'>]+', re.IGNORECASE),
+    # 相对路径
+    re.compile(r'/[^\s"\'>]+', re.IGNORECASE),
 ]
 
 
@@ -38,18 +44,22 @@ def normalize_url(url: str, base_url: Optional[str] = None) -> str:
         规范化后的URL
     """
     try:
-        # 处理双斜杠开头的URL
+        # 处理双斜杠开头的URL：优先https，或继承base_url协议
         if url.startswith('//'):
-            return f'http:{url}'
+            if base_url:
+                base_parsed = urlparse(base_url)
+                scheme = base_parsed.scheme or 'https'
+                return f'{scheme}:{url}'
+            return f'https:{url}'
         
         # 处理相对路径
         if base_url and not (url.startswith('http://') or url.startswith('https://')):
             return urljoin(base_url, url)
         
-        # 对于纯域名，添加http://
+        # 对于纯域名，默认添加https://
         parsed = urlparse(url)
         if not parsed.scheme:
-            return f'http://{url}'
+            return f'https://{url}'
         
         return url
         
@@ -157,9 +167,10 @@ def is_external_link(url: str, base_domain: Optional[str] = None) -> bool:
     if not url_domain:
         return False
     if not base_domain:
-        # 未提供基础域名时，认为绝对链接均为外部，非 http(s) 或相对路径视为内部
+        # 未提供基础域名时，尽量避免误报：只有显式协议的绝对链接视为外部
         return url.startswith(('http://', 'https://'))
     # 检查是否为同一域名或子域名
+    # 同域或子域视为内部，其余为外部
     return not (url_domain == base_domain or url_domain.endswith(f'.{base_domain}'))
 
 # 兼容性函数，用于判断字符串是否为URL
@@ -176,12 +187,23 @@ def is_url(text: str) -> bool:
     try:
         # 首先检查是否为本地文件，如果是，直接返回False
         if os.path.isfile(text) or os.path.isdir(text):
-            logger.info(f"{text} 是本地文件或目录，不视为URL")
+            logger.debug(f"{text} 是本地文件或目录，不视为URL")
             return False
         
         # 检查是否以http://或https://开头
         if text.startswith(('http://', 'https://')):
             return True
+        
+        # 过滤典型代码符号，避免误判为URL
+        if re.search(r"^(document|window|parent|this)\.[A-Za-z_]", text):
+            return False
+        if re.search(r"^[A-Za-z_][A-Za-z0-9_]*\s*\(", text):
+            if not re.search(r"https?://", text):
+                # 若函数调用前缀，但内容中存在引号包裹的URL片段，视为URL
+                quoted = re.findall(r'"([^"]+)"|\'([^\']+)' , text)
+                candidates = [q[0] or q[1] for q in quoted]
+                if not any((p.search(seg) for seg in URL_PATTERNS for seg in candidates)):
+                    return False
         
         # 检查是否通过URL格式验证
         if not validate_url(text):
@@ -327,10 +349,18 @@ def fetch_url_content(url: str, session: Optional[requests.Session] = None, **kw
         
         response.raise_for_status()
         
-        # 尝试自动检测编码
-        response.encoding = response.apparent_encoding
+        # 尝试自动检测编码，并在失败时回退到原始字节解码
+        enc = response.apparent_encoding or response.encoding or 'utf-8'
+        try:
+            response.encoding = enc
+            text = response.text
+        except Exception:
+            try:
+                text = response.content.decode(enc, errors='replace')
+            except Exception:
+                text = response.content.decode('utf-8', errors='replace')
         
-        return response.text, dict(response.headers)
+        return text, dict(response.headers)
         
     except requests.exceptions.RequestException as e:
         logger.error(f"获取URL内容失败: {url}, 错误: {str(e)}")
@@ -394,7 +424,7 @@ def analyze_url_risk(url: str) -> Dict[str, Any]:
         logger.error(f"URL风险评估失败: {url}, 错误: {str(e)}")
         return {'risk_level': 0, 'reason': '评估失败'}
 
-def extract_urls(text: str) -> List[Dict[str, Any]]:
+def extract_urls(text: str, context_type: Optional[str] = None) -> List[Dict[str, Any]]:
     """
     从文本中提取所有URL
     
@@ -446,12 +476,13 @@ def extract_urls(text: str) -> List[Dict[str, Any]]:
                 results.append({
                     'url': url,
                     'context': context,
-                    'position': match.start()
+                    'position': (match.start(), match.end()),
+                    'context_type': context_type or 'unknown'
                 })
         
-        logger.info(f"模式 {i} 匹配到 {match_count} 个URL")
+        logger.debug(f"模式 {i} 匹配到 {match_count} 个URL")
     
-    logger.info(f"共提取到 {len(results)} 个唯一URL")
+    logger.debug(f"共提取到 {len(results)} 个唯一URL")
     return results
 URL_PATTERNS.extend([
     # 扩展的HTTP/HTTPS URL
@@ -465,3 +496,12 @@ URL_PATTERNS.extend([
     # 相对路径
     re.compile(r'\/[^\s"\'>]+', re.IGNORECASE),
 ])
+# 模式去重：基于正则字符串与flags，避免重复匹配与性能开销
+_unique_patterns = []
+_seen = set()
+for _pat in URL_PATTERNS:
+    _key = (_pat.pattern, _pat.flags)
+    if _key not in _seen:
+        _seen.add(_key)
+        _unique_patterns.append(_pat)
+URL_PATTERNS = _unique_patterns

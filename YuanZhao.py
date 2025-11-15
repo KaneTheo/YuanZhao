@@ -82,6 +82,7 @@ def parse_arguments():
     parser.add_argument('--js-wait', type=int, default=3, help='JavaScript执行等待时间 (秒, 默认: 3)')
     parser.add_argument('--headless-timeout', type=int, default=60, help='无头浏览器超时时间 (秒, 默认: 60)')
     parser.add_argument('--headless-binary', help='Chrome二进制路径 (例如: C\\Program Files\\Google\\Chrome\\Application\\chrome.exe)')
+    parser.add_argument('--headless-driver', help='ChromeDriver路径 (例如: C\\drivers\\chromedriver.exe)')
     
     # 添加使用示例
     parser.epilog = '''
@@ -222,6 +223,7 @@ def main():
     config.js_wait_time = args.js_wait
     config.headless_timeout = args.headless_timeout
     config.headless_binary = args.headless_binary
+    config.headless_driver_path = args.headless_driver
     if args.headless:
         config.headless_auto_download = True
     

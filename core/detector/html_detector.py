@@ -251,7 +251,8 @@ class HTMLDetector:
         # 检测内联脚本
         script_tags = extract_script_tags(content)
         for script in script_tags:
-            if script.get('inline', False):
+            is_inline = script.get('inline') if 'inline' in script else (not script.get('src') and bool(script.get('content')))
+            if is_inline:
                 # 统计脚本长度
                 script_length = len(script['content'])
                 
@@ -412,13 +413,13 @@ class HTMLDetector:
             'large_comment': re.compile(r'<!--(?:(?!-->)[\s\S]){500,}-->')
         }
         
-        for comment in comments:
-            # 确保comment是字符串类型
-            if not isinstance(comment, str):
+        for c in comments:
+            text = c['content'] if isinstance(c, dict) else (c if isinstance(c, str) else '')
+            if not text:
                 continue
                 
             for pattern_name, pattern in suspicious_comment_patterns.items():
-                if pattern.search(comment):
+                if pattern.search(text):
                     # 计算风险等级
                     risk_level = self._get_comment_risk_level(pattern_name)
                     
@@ -426,20 +427,20 @@ class HTMLDetector:
                         'type': 'suspicious_comment',
                         'file_path': file_path,
                         'pattern': pattern_name,
-                        'comment': comment[:200] + ('...' if len(comment) > 200 else ''),
+                        'comment': text[:200] + ('...' if len(text) > 200 else ''),
                         'risk_level': risk_level,
                         'description': self._get_comment_description(pattern_name),
-                        'context': get_context(content, content.find(comment), content.find(comment) + len(comment), 50)
+                        'context': get_context(content, content.find(text), content.find(text) + len(text), 50)
                     }
                     results.append(result)
         
         # 检测注释中的链接
         link_pattern = re.compile(r'href=["\'](https?://[^"\']+)')
-        for comment in comments:
-            # 确保comment是字符串类型
-            if not isinstance(comment, str):
+        for c in comments:
+            text = c['content'] if isinstance(c, dict) else (c if isinstance(c, str) else '')
+            if not text:
                 continue
-            for match in link_pattern.finditer(comment):
+            for match in link_pattern.finditer(text):
                 url = match.group(1)
                 result = {
                     'type': 'suspicious_url',
@@ -447,7 +448,7 @@ class HTMLDetector:
                     'url': url,
                     'risk_level': 3,
                     'reason': '链接位于HTML注释中',
-                    'context': comment[:200] + ('...' if len(comment) > 200 else '')
+                    'context': text[:200] + ('...' if len(text) > 200 else '')
                 }
                 results.append(result)
         

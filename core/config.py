@@ -33,6 +33,10 @@ class Config:
         
         # 调试模式
         self.debug = False
+        # 调试日志读取参数
+        self.debug_log_wait_ms = 1500
+        self.debug_log_checks = 3
+        self.debug_log_interval_ms = 500
         
         # 日志器
         import logging

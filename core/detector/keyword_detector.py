@@ -30,38 +30,30 @@ class KeywordDetector:
             
             # 读取关键字文件
             with open(keywords_file, 'r', encoding=encoding) as f:
-                for line_num, line in enumerate(f, 1):
-                    # 去除注释行和空行
-                    line = line.strip()
-                    if not line or line.startswith('#'):
+                import csv
+                reader = csv.reader(f)
+                for line_num, parts in enumerate(reader, 1):
+                    # 去除空行
+                    if not parts or all((p.strip() == '' for p in parts)):
                         continue
-                    
-                    # 解析CSV格式：关键字,类别,风险权重
-                    parts = line.split(',')
                     if len(parts) < 3:
-                        logger.warning(f"关键字文件第{line_num}行格式错误，跳过: {line}")
+                        logger.warning(f"关键字文件第{line_num}行格式错误，跳过: {parts}")
                         continue
-                    
                     keyword = parts[0].strip()
                     category = parts[1].strip()
-                    
                     # 验证风险权重
                     try:
                         weight = int(parts[2].strip())
                         if not 1 <= weight <= 10:
-                            logger.warning(f"关键字文件第{line_num}行风险权重超出范围(1-10)，使用默认值5: {line}")
+                            logger.warning(f"关键字文件第{line_num}行风险权重超出范围(1-10)，使用默认值5: {parts}")
                             weight = 5
-                    except ValueError:
-                        logger.warning(f"关键字文件第{line_num}行风险权重不是数字，使用默认值5: {line}")
+                    except Exception:
+                        logger.warning(f"关键字文件第{line_num}行风险权重不是数字，使用默认值5: {parts}")
                         weight = 5
-                    
-                    # 验证类别
                     valid_categories = ['gambling', 'porn', 'malware', 'phishing', 'other']
                     if category not in valid_categories:
-                        logger.warning(f"关键字文件第{line_num}行类别无效，使用默认类别other: {line}")
+                        logger.warning(f"关键字文件第{line_num}行类别无效，使用默认类别other: {parts}")
                         category = 'other'
-                    
-                    # 添加关键字
                     self.keywords.append((keyword, category, weight))
             
             # 编译正则表达式模式
