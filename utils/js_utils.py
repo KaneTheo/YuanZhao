@@ -159,8 +159,18 @@ def detect_dynamic_urls(js_content: str) -> List[Dict[str, str]]:
                 
                 # 判断是否包含变量或表达式
                 if any(ch in code_segment for ch in ['+', '\'', '"', '`', '[', ']', '(', ')']):
+                    # 优先尝试从表达式中提取规范化URL常量
+                    url_const = None
+                    m_http = re.search(r'["\'`]\s*(https?://[^"\'`\s]+)\s*["\'`]', code_segment)
+                    if m_http:
+                        url_const = m_http.group(1)
+                    m_proto = re.search(r'["\'`]\s*(//[^"\'`\s]+)\s*["\'`]', code_segment)
+                    if (not url_const) and m_proto:
+                        url_const = 'https:' + m_proto.group(1)
                     dynamic_urls.append({
-                        'code_segment': code_segment,
+                        'url': url_const if url_const else None,
+                        'expression': code_segment,
+                        'reason': '动态构建的URL',
                         'context': get_code_context(js_content, start_pos, end_pos),
                         'position': (start_pos, end_pos)
                     })
@@ -292,9 +302,13 @@ def detect_document_modification(js_content: str) -> List[Dict[str, str]]:
                 start_pos = match.start(0)
                 end_pos = match.end(0)
                 
+                target = modification_type
+                value = code_segment
                 modifications.append({
-                    'type': modification_type,
-                    'code_segment': code_segment,
+                    'action': 'modify_document',
+                    'target': target,
+                    'value': value,
+                    'description': modification_type,
                     'context': get_code_context(js_content, start_pos, end_pos),
                     'position': (start_pos, end_pos)
                 })
@@ -342,7 +356,7 @@ def extract_variable_assignments(js_content: str, variable_name: str) -> List[Di
     
     return assignments
 
-def extract_comments(js_content: str) -> List[Dict[str, str]]:
+def extract_comments(js_content: str) -> List[Dict[str, Any]]:
     """
     提取JavaScript注释
     

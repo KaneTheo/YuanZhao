@@ -12,12 +12,12 @@ from utils.css_utils import (
     extract_css_urls,
     extract_import_rules,
     extract_selectors,
-    extract_properties,
+    extract_css_properties,
     detect_hidden_elements,
     detect_suspicious_selectors,
-    remove_comments as css_remove_comments,
-    extract_comments as css_extract_comments,
-    analyze_complexity,
+    remove_css_comments as css_remove_comments,
+    extract_css_comments as css_extract_comments,
+    analyze_css_complexity,
     find_duplicate_rules
 )
 from utils.common_utils import (
@@ -298,7 +298,7 @@ class CSSDetector:
         results = []
         
         # 使用css_utils中的函数提取属性
-        properties = extract_properties(content)
+        properties = extract_css_properties(content)
         
         # 检查每个属性是否包含可疑值
         for prop_info in properties:
@@ -394,7 +394,7 @@ class CSSDetector:
                 risk_level = 3
                 reasons.append('外部链接')
                 # 检查是否包含可疑域名特征
-                if any(pattern in url.lower() for pattern in ['\.cn/', 'cdn\.', 'static\.', 'assets\.']):
+                if any(pattern in url.lower() for pattern in ['.cn/', 'cdn.', 'static.', 'assets.']):
                     risk_level = min(4, risk_level + 1)
             
             if risk_level >= 3:
@@ -494,8 +494,9 @@ class CSSDetector:
                              'seo', 'spam', 'keywords', 'backlink', 'redirect',
                              'hack', 'exploit', 'malware', 'phish']
         
-        for comment in comments:
-            comment_lower = comment.lower()
+        for c in comments:
+            text = c.get('content', '')
+            comment_lower = text.lower()
             
             # 检查是否包含可疑关键词
             for keyword in suspicious_keywords:
@@ -506,7 +507,7 @@ class CSSDetector:
                         'keyword': keyword,
                         'risk_level': 3,
                         'description': f"CSS注释中包含可疑关键词: {keyword}",
-                        'context': comment[:200] + ('...' if len(comment) > 200 else '')
+                        'context': text[:200] + ('...' if len(text) > 200 else '')
                     }
                     results.append(result)
                     break
@@ -520,7 +521,7 @@ class CSSDetector:
                     'file_path': file_path,
                     'risk_level': 3,
                     'description': "CSS注释中包含大量重复词汇，可能是关键词堆砌",
-                    'context': comment[:200] + ('...' if len(comment) > 200 else '')
+                    'context': text[:200] + ('...' if len(text) > 200 else '')
                 }
                 results.append(result)
         

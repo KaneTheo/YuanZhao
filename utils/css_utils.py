@@ -154,7 +154,7 @@ def extract_css_properties(css_content: str) -> List[Dict[str, str]]:
                 prop_value = prop.group(2).strip()
                 
                 properties.append({
-                    'name': prop_name,
+                    'property': prop_name,
                     'value': prop_value,
                     'position': (body_start + prop.start(1), body_start + prop.end(1))
                 })

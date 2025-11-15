@@ -68,6 +68,22 @@ class HeadlessBrowserDetector:
             self.logger.error("请安装依赖: pip install selenium webdriver-manager")
         except Exception as e:
             self.logger.error(f"无头浏览器初始化失败: {str(e)}")
+
+    def close(self):
+        """释放浏览器驱动资源"""
+        try:
+            if self.driver:
+                self.driver.quit()
+                self.driver = None
+                self.logger.info("已释放无头浏览器驱动")
+        except Exception as e:
+            self.logger.error(f"释放无头浏览器驱动失败: {str(e)}")
+
+    def __del__(self):
+        try:
+            self.close()
+        except Exception:
+            pass
     
     def detect(self, url: str, content: str = None) -> List[Dict[str, Any]]:
         """使用无头浏览器检测暗链

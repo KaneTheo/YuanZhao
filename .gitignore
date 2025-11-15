@@ -49,7 +49,8 @@ dist/
 reports/
 logs/
 *.log
-immediate_debug_content.html
+# 调试临时文件会保存到reports目录并以时间戳命名，无需具体文件名忽略
+reports/*
 
 # Virtual environments
 venv/
@@ -62,5 +63,3 @@ pyvenv/
 ._*
 .Spotlight-V100
 .Trashes
-ehthumbs.db
-Thumbs.db

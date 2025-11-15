@@ -536,10 +536,14 @@ class Scanner:
                             'source': url,
                             'risk_level': 3,
                             'context': f"在{url_type}中直接发现可疑脚本链接",
-                            'type': 'suspicious_script_url'
+                            'type': 'suspicious_script_url',
+                            'context_type': 'html',
+                            'source_tag': 'debug'
                         })
-                        self.results['total_issues'] += 1
-                debug_file = 'immediate_debug_content.html'
+                        # 调试分支不计入总问题数，避免与聚合阶段重复累加
+                report_dir = os.path.dirname(self.config.report_file) if getattr(self.config, 'report_file', None) else os.path.join(os.getcwd(), 'reports')
+                os.makedirs(report_dir, exist_ok=True)
+                debug_file = os.path.join(report_dir, f"debug_{int(time.time())}.html")
                 try:
                     with self.lock:
                         with open(debug_file, 'w', encoding='utf-8') as f:
@@ -797,7 +801,7 @@ class Scanner:
                                                     self.logger.warning(f"URL: {url} 发现可疑CSS: {issue.get('description', '未知问题')}")
 
                                         # 特殊隐藏技术检测
-                                        special_results = self.special_hiding_detector.detect(url, content)
+                                        special_results = self.special_hiding_detector.detect(content, url)
                                         if special_results:
                                             with self.lock:
                                                 self.results['hidden_elements'].extend(special_results)

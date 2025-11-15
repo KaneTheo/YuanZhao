@@ -26,6 +26,7 @@
 ### 全面的报告系统
 - **多种报告格式**：文本报告(txt)、HTML报告(html)、JSON报告(json)、CSV报告(csv)
 - **丰富的报告内容**：扫描概览、问题详情、风险评估、上下文展示
+ - **来源类型标注**：在可疑链接中增加 `context_type` 字段（如 `html/js/css/comments`），用于区分链接的来源场景，便于后续数据分析与过滤
 
 ### 灵活的配置选项
 - **多种扫描模式**：fast/standard/deep
@@ -192,6 +193,8 @@ phishing,phishing,9
 - `--browser-type`: 无头浏览器类型（支持: chrome，默认: chrome）
 - `--js-wait`: JavaScript执行等待时间（秒，默认: 3）
 - `--headless-timeout`: 无头浏览器超时时间（秒，默认: 60）
+ - `--headless-binary`: Chrome二进制路径（例如：`C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe`）
+ - `--headless-driver`: ChromeDriver路径（例如：`C:\\drivers\\chromedriver.exe`）
 
 ## 常见问题解答
 
@@ -226,6 +229,17 @@ YuanZhao/
 ## 许可证与免责声明
 
 本工具仅供安全测试和应急响应使用，请确保您有足够的授权对目标进行扫描，避免对未经授权的系统进行测试。
+
+## 开发者提示（工具接口）
+- CSS工具正式接口：`extract_css_properties/remove_css_comments/extract_css_comments`
+- 兼容别名（为支持历史导入）：`extract_properties/remove_comments/extract_comments`（建议迁移到正式接口，未来版本可能逐步移除）
+
+## 开发者选项（日志与报告）
+- `debug_log_wait_ms`：调试读取日志的初始等待时间（毫秒），默认 1500
+- `debug_log_checks`：日志稳定性检查次数，默认 3
+- `debug_log_interval_ms`：每次稳定性检查的间隔（毫秒），默认 500
+- 提取统计日志级别：常规运行为 `debug`（匹配数与总提取数），在 `--verbose` 场景下查看更详细日志
+- 报告来源字段：`context_type`（html/js/css/comments）与 `source_tag`（debug/normal）用于区分来源与路径
 ## Star History
 
 <a href="https://www.star-history.com/#KaneTheo/YuanZhao&type=date&legend=top-left">
