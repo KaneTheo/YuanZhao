@@ -484,7 +484,7 @@ def extract_urls(text: str, context_type: Optional[str] = None) -> List[Dict[str
     
     logger.debug(f"共提取到 {len(results)} 个唯一URL")
     return results
-URL_PATTERNS.extend([
+EXTRA_PATTERNS = [
     # 扩展的HTTP/HTTPS URL
     re.compile(r'https?://[\w\-\.]+(?:\.[\w\-]+)+[\w\-\._~:/?#[\]@!\$&\'\(\)\*\+,;=.]+', re.IGNORECASE),
     # 没有协议的域名
@@ -495,7 +495,7 @@ URL_PATTERNS.extend([
     re.compile(r'data:[^;]+;base64,[^\s"\'>]+', re.IGNORECASE),
     # 相对路径
     re.compile(r'\/[^\s"\'>]+', re.IGNORECASE),
-])
+]
 # 模式去重：基于正则字符串与flags，避免重复匹配与性能开销
 _unique_patterns = []
 _seen = set()

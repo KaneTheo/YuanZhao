@@ -407,19 +407,44 @@ def extract_comments(js_content: str) -> List[Dict[str, Any]]:
 def strip_comments(js_content: str) -> str:
     """
     移除JavaScript注释
-    
-    Args:
-        js_content: JavaScript代码
-    
-    Returns:
-        移除注释后的代码
     """
     try:
-        # 移除多行注释
-        js_content = re.sub(r'/\*.*?\*/', '', js_content, flags=re.DOTALL)
-        # 移除单行注释
-        js_content = re.sub(r'//.*?$', '', js_content, flags=re.MULTILINE)
-        return js_content
+        s = js_content
+        out = []
+        i = 0
+        n = len(s)
+        in_sq = False
+        in_dq = False
+        in_bt = False
+        while i < n:
+            ch = s[i]
+            if not in_sq and not in_dq and not in_bt and ch == '/' and i + 1 < n:
+                nxt = s[i+1]
+                if nxt == '/':
+                    j = i + 2
+                    while j < n and s[j] not in '\n\r':
+                        j += 1
+                    i = j
+                    continue
+                if nxt == '*':
+                    j = i + 2
+                    while j + 1 < n and not (s[j] == '*' and s[j+1] == '/'):
+                        j += 1
+                    i = j + 2 if j + 1 < n else n
+                    continue
+            out.append(ch)
+            if ch == "'" and not in_dq and not in_bt:
+                esc = i > 0 and s[i-1] == '\\'
+                if not esc:
+                    in_sq = not in_sq
+            elif ch == '"' and not in_sq and not in_bt:
+                esc = i > 0 and s[i-1] == '\\'
+                if not esc:
+                    in_dq = not in_dq
+            elif ch == '`' and not in_sq and not in_dq:
+                in_bt = not in_bt
+            i += 1
+        return ''.join(out)
     except Exception as e:
         logger.error(f"移除JavaScript注释失败: {str(e)}")
         return js_content
@@ -439,27 +464,7 @@ def identify_obfuscated_code(js_content: str) -> Dict[str, Any]:
         'sample': sample
     }
 
-def detect_document_modifications(js_content: str) -> List[Dict[str, str]]:
-    """
-    检测文档修改操作（detect_document_modification的别名）
-    
-    Args:
-        js_content: JavaScript代码
-    
-    Returns:
-        文档修改操作列表
-    """
-    return detect_document_modification(js_content)
+## 兼容别名已移除，请使用 detect_document_modification
 
-def remove_comments(js_content: str) -> str:
-    """
-    移除JavaScript注释（strip_comments的别名）
-    
-    Args:
-        js_content: JavaScript代码
-    
-    Returns:
-        移除注释后的代码
-    """
-    return strip_comments(js_content)
+## 兼容别名已移除，请使用 strip_comments
     

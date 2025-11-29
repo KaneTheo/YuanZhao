@@ -26,7 +26,8 @@
 ### 全面的报告系统
 - **多种报告格式**：文本报告(txt)、HTML报告(html)、JSON报告(json)、CSV报告(csv)
 - **丰富的报告内容**：扫描概览、问题详情、风险评估、上下文展示
- - **来源类型标注**：在可疑链接中增加 `context_type` 字段（如 `html/js/css/comments`），用于区分链接的来源场景，便于后续数据分析与过滤
+- **来源类型标注**：在可疑链接中增加 `context_type` 字段（如 `html/js/css/comments`），用于区分链接的来源场景，便于后续数据分析与过滤
+ - **来源标签与位置**：统一输出 `source_tag`（如 `debug/normal`）与定位范围 `position (start,end)`，HTML/CSV/JSON 报告保持一致
 
 ### 灵活的配置选项
 - **多种扫描模式**：fast/standard/deep
@@ -232,7 +233,7 @@ YuanZhao/
 
 ## 开发者提示（工具接口）
 - CSS工具正式接口：`extract_css_properties/remove_css_comments/extract_css_comments`
-- 兼容别名（为支持历史导入）：`extract_properties/remove_comments/extract_comments`（建议迁移到正式接口，未来版本可能逐步移除）
+- 统一正式接口（`extract_css_properties/remove_css_comments/extract_css_comments`）。
 
 ## 开发者选项（日志与报告）
 - `debug_log_wait_ms`：调试读取日志的初始等待时间（毫秒），默认 1500

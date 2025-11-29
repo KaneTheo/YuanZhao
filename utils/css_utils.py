@@ -296,44 +296,6 @@ def remove_css_comments(css_content: str) -> str:
         logger.error(f"移除CSS注释失败: {str(e)}")
         return css_content
 
-# 兼容性函数，为了支持css_detector.py中的导入
-def extract_properties(css_content: str) -> List[Dict[str, str]]:
-    """
-    提取CSS属性（extract_css_properties的别名）
-    
-    Args:
-        css_content: CSS内容
-    
-    Returns:
-        CSS属性列表
-    """
-    return extract_css_properties(css_content)
-
-# 兼容性函数，为了支持css_detector.py中的导入
-def remove_comments(css_content: str) -> str:
-    """
-    移除CSS注释（remove_css_comments的别名）
-    
-    Args:
-        css_content: CSS内容
-    
-    Returns:
-        移除注释后的CSS内容
-    """
-    return remove_css_comments(css_content)
-
-# 兼容性函数，为了支持css_detector.py中的导入
-def extract_comments(css_content: str) -> List[Dict[str, str]]:
-    """
-    提取CSS注释（extract_css_comments的别名）
-    
-    Args:
-        css_content: CSS内容
-    
-    Returns:
-        CSS注释列表
-    """
-    return extract_css_comments(css_content)
 
 def analyze_complexity(css_content: str) -> Dict[str, int]:
     """

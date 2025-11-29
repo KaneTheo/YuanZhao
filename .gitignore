@@ -44,6 +44,7 @@ pytest.xml
 dist/
 *.egg
 *.egg-info/
+bug*.md
 
 # Reports and logs
 reports/

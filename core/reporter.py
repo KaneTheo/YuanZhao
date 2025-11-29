@@ -263,6 +263,7 @@ class Reporter:
                         <th>类型</th>
                         <th>检测方式</th>
                         <th>风险等级</th>
+                        <th>位置</th>
                         <th>上下文</th>
                     </tr>
                 </thead>
@@ -301,6 +302,8 @@ class Reporter:
                             context_info = f"从日志中检测到: {_escape_html(detail)}"
                             break
                 
+                pos = link.get('position')
+                pos_display = _escape_html(f"{pos[0]}-{pos[1]}" if isinstance(pos, (list, tuple)) and len(pos) == 2 else 'N/A')
                 html_content += f"""
                     <tr>
                         <td>{i}</td>
@@ -310,6 +313,7 @@ class Reporter:
                         <td>{_escape_html(link.get('type', 'N/A'))}</td>
                         <td>{_escape_html(link.get('detection_method', 'N/A'))}</td>
                         <td class="{risk_class}">{link.get('risk_level', 'N/A')}</td>
+                        <td>{pos_display}</td>
                         <td><div class="context">{_escape_html(context_info)}</div></td>
                     </tr>
                 """
@@ -455,17 +459,22 @@ class Reporter:
             # 写入可疑链接
             if results.get('suspicious_links', []):
                 writer.writerow(['可疑链接'])
-                writer.writerow(['序号', '链接', '来源', '类型', '检测方式', '风险等级', '上下文'])
+                writer.writerow(['序号', '链接', '来源', '来源类型', '来源标签', '类型', '检测方式', '风险等级', '位置', '上下文'])
                 
                 for i, link in enumerate(results['suspicious_links'], 1):
                     link_display = link.get('link', '') or link.get('url', '') or (link.get('expression', '')[:100] + '...' if link.get('expression') else '')
+                    pos = link.get('position')
+                    pos_display = f"{pos[0]}-{pos[1]}" if isinstance(pos, (list, tuple)) and len(pos) == 2 else ''
                     writer.writerow([
                         i,
                         _sanitize_csv_cell(link_display),
                         _sanitize_csv_cell(link.get('source', '')),
+                        _sanitize_csv_cell(link.get('context_type', 'N/A')),
+                        _sanitize_csv_cell(link.get('source_tag', 'N/A')),
                         _sanitize_csv_cell(link.get('type', '')),
                         _sanitize_csv_cell(link.get('detection_method', '')),
                         link.get('risk_level', ''),
+                        _sanitize_csv_cell(pos_display),
                         _sanitize_csv_cell((link.get('context', '') or '')[:200])
                     ])
                 writer.writerow([])
