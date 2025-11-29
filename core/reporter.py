@@ -393,7 +393,7 @@ class Reporter:
     
     <div class="footer">
         <p>本报告由渊照暗链扫描工具自动生成</p>
-        <p>© 2024 YuanZhao</p>
+        <p>© 2024 <a href="https://github.com/KaneTheo/YuanZhao" target="_blank" title="访问YuanZhao GitHub仓库">YuanZhao</a> | 暗链扫描工具</p>
     </div>
 </body>
 </html>
