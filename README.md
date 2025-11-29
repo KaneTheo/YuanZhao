@@ -28,10 +28,12 @@
 - **丰富的报告内容**：扫描概览、问题详情、风险评估、上下文展示
 - **来源类型标注**：在可疑链接中增加 `context_type` 字段（如 `html/js/css/comments`），用于区分链接的来源场景，便于后续数据分析与过滤
  - **来源标签与位置**：统一输出 `source_tag`（如 `debug/normal`）与定位范围 `position (start,end)`，HTML/CSV/JSON 报告保持一致
+ - **风险排序与阈值展示**：HTML报告对“可疑链接”按风险降序展示，并默认仅展示风险≥4的项，减少噪音；关键字匹配表支持从上下文提取可点击链接
 
 ### 灵活的配置选项
 - **多种扫描模式**：fast/standard/deep
 - **性能优化选项**：可配置并发线程数、请求超时设置、代理服务器支持
+ - **关键词来源**：支持从 `keywords_example.txt` 或自定义 `--keyword-file` 读取，文件允许 `#` 注释行，CSV格式：`关键字,类别,风险权重`
 
 ## 安装指南
 
@@ -136,7 +138,21 @@ python YuanZhao.py https://example.com -m fast -d 1 -t 5
 python YuanZhao.py /path/to/important-site -m deep -d 3 -f html --verbose
 ```
 
-#### 5. 特定场景优化命令
+#### 5. 批量目标扫描（多链接/多路径）
+```bash
+# 方式A：指定列表文件（每行一个目标：URL/文件/目录）
+python YuanZhao.py --target-file e:\targets.txt -m deep -f html -o reports --verbose
+
+# 方式B：直接把 .txt 作为 target 传入（同样按列表处理）
+python YuanZhao.py e:\targets.txt -m deep -f html -o reports --verbose
+
+# 示例列表文件内容
+# https://example.com
+# e:\webroot
+# e:\webroot\index.html
+```
+
+#### 6. 特定场景优化命令
 ```bash
 # 应急响应场景
 python YuanZhao.py /compromised/webroot -m deep -f html -o incident_response --keyword-file malware_keywords.txt --verbose
@@ -166,6 +182,7 @@ phishing,phishing,9
 
 类别可选值：gambling (博彩)、porn (色情)、malware (恶意软件)、phishing (钓鱼)、other (其他)
 风险权重范围：1-10（10为最高风险）
+ 默认关键字文件：项目根目录 `keywords_example.txt`（若未指定 `--keyword-file` 将自动加载）。文件允许以 `#` 开头的注释行。
 
 ## 主要参数说明
 
@@ -185,6 +202,7 @@ phishing,phishing,9
 
 ### 高级参数
 - `--keyword-file`: 自定义关键字文件路径
+- `--target-file`: 批量目标列表文件路径（每行一个目标：URL/文件/目录）
 - `--exclude`: 排除的文件或目录
 - `--verbose`: 显示详细日志信息
 - `--no-color`: 禁用彩色输出（适用于自动化脚本）
@@ -200,7 +218,10 @@ phishing,phishing,9
 ## 常见问题解答
 
 **Q: 扫描结果中的误报如何处理？**
-A: 可以通过创建自定义关键字文件调整特定关键词的风险权重来减少误报，或结合扫描模式选择更精确的扫描策略。
+A: 可通过以下方式降低噪音：
+- 使用自定义关键字文件调整权重
+- 利用报告的风险阈值（HTML默认展示风险≥4）聚焦高风险项
+- 依赖优化后的CSS检测逻辑与可信CDN白名单，避免将正常资源识别为可疑
 
 **Q: 如何提高大型网站的扫描效率？**
 A: 增加线程数、设置合理的爬取深度，或先使用基础模式（`fast`）进行初步筛选。对于公网网站，建议控制扫描范围。
@@ -241,6 +262,8 @@ YuanZhao/
 - `debug_log_interval_ms`：每次稳定性检查的间隔（毫秒），默认 500
 - 提取统计日志级别：常规运行为 `debug`（匹配数与总提取数），在 `--verbose` 场景下查看更详细日志
 - 报告来源字段：`context_type`（html/js/css/comments）与 `source_tag`（debug/normal）用于区分来源与路径
+ - 关键字匹配报告：支持从上下文自动提取 `http(s)` 链接并渲染为可点击链接
+ - HTML报告“可疑链接详情”默认按风险降序并过滤低风险项（≥4显示）
 ## Star History
 
 <a href="https://www.star-history.com/#KaneTheo/YuanZhao&type=date&legend=top-left">

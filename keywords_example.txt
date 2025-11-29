@@ -1,10 +1,3 @@
-# 渊照 - 暗链扫描工具 关键字配置文件示例
-# 注释行以 # 开头
-# 关键字格式：关键字,类别,风险权重
-# 类别可以是：gambling(博彩), porn(色情), malware(恶意软件), phishing(钓鱼), other(其他)
-# 风险权重范围：1-10，10为最高风险
-
-# 博彩类关键字
 bet365, gambling, 9
 皇冠体育, gambling, 9
 火博, gambling, 9
@@ -27,8 +20,6 @@ bet365, gambling, 9
 快三, gambling, 9
 彩票软件, gambling, 9
 体彩预测, gambling, 8
-
-# 色情类关键字
 色情, porn, 9
 成人, porn, 8
 AV, porn, 9
@@ -42,8 +33,6 @@ H视频, porn, 10
 裸聊, porn, 9
 露骨, porn, 8
 情色, porn, 9
-
-# 恶意软件类关键字
 木马, malware, 10
 病毒, malware, 9
 勒索软件, malware, 10
@@ -52,8 +41,6 @@ H视频, porn, 10
 DDoS, malware, 10
 后门, malware, 10
 远程控制, malware, 9
-
-# 钓鱼类关键字
 账号密码, phishing, 8
 银行登录, phishing, 10
 支付验证, phishing, 9
@@ -64,22 +51,16 @@ DDoS, malware, 10
 转账, phishing, 9
 银行卡, phishing, 8
 验证码, phishing, 7
-
-# 非法借贷类
 高利贷, other, 10
 网贷, other, 7
 小额贷, other, 8
 民间借贷, other, 7
 校园贷, other, 10
-
-# 游戏私服类
 私服, other, 7
 外挂, other, 8
 传奇私服, other, 9
 新开私服, other, 8
 破解版, other, 7
-
-# 黑客工具类
 黑客, other, 8
 渗透测试, other, 5
 漏洞扫描, other, 6
@@ -87,24 +68,18 @@ DDoS, malware, 10
 注册机, other, 7
 激活码, other, 6
 黑客工具, other, 9
-
-# 可疑域名/URL模式
 .cm, other, 7
 .tk, other, 6
 .ga, other, 6
 .ml, other, 6
 .tf, other, 6
 .gq, other, 6
-
-# 暗链隐藏技术
 display:none, other, 9
 visibility:hidden, other, 9
 opacity:0, other, 8
 position:absolute, other, 6
 z-index:-1, other, 7
 text-indent:-9999px, other, 8
-
-# 可疑JavaScript函数
 document.write, other, 7
 eval(, other, 9
 setTimeout("", other, 8
@@ -112,8 +87,6 @@ location.href=, other, 7
 window.open(, other, 6
 XMLHttpRequest, other, 5
 fetch(, other, 5
-
-# 其他可疑关键字
 翻墙, other, 7
 VPN, other, 6
 暴力, other, 9

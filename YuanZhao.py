@@ -83,6 +83,7 @@ def parse_arguments():
     parser.add_argument('--headless-timeout', type=int, default=60, help='无头浏览器超时时间 (秒, 默认: 60)')
     parser.add_argument('--headless-binary', help='Chrome二进制路径 (例如: C\\Program Files\\Google\\Chrome\\Application\\chrome.exe)')
     parser.add_argument('--headless-driver', help='ChromeDriver路径 (例如: C\\drivers\\chromedriver.exe)')
+    parser.add_argument('--target-file', help='目标列表文件，每行一个目标')
     
     # 添加使用示例
     parser.epilog = '''
@@ -126,10 +127,23 @@ def validate_arguments(args):
         if not os.path.exists(args.target):
             print(f"错误：目标 '{args.target}' 不存在")
             return False
+        if args.target.lower().endswith('.txt'):
+            try:
+                with open(args.target, 'r', encoding='utf-8') as f:
+                    lines = [line.strip() for line in f.readlines() if line.strip()]
+                if not lines:
+                    print("错误：目标列表文件为空")
+                    return False
+            except Exception:
+                print("错误：无法读取目标列表文件")
+                return False
     
     # 验证关键字文件
     if args.keyword_file and not os.path.exists(args.keyword_file):
         print(f"错误：关键字文件 '{args.keyword_file}' 不存在")
+        return False
+    if args.target_file and not os.path.exists(args.target_file):
+        print(f"错误：目标列表文件 '{args.target_file}' 不存在")
         return False
     
     # 验证线程数
@@ -231,30 +245,73 @@ def main():
     log_config(logger, config.get_config_dict())
     
     try:
-        # 创建扫描器
-        scanner = Scanner(config)
-        
-        # 开始扫描
-        results = scanner.scan()
-        
-        # 记录结束时间
+        targets = []
+        if args.target_file:
+            with open(args.target_file, 'r', encoding='utf-8') as f:
+                targets = [line.strip() for line in f.readlines() if line.strip()]
+            summary_target = f"目标列表: {args.target_file} ({len(targets)} 项)"
+        elif not args.target.startswith(('http://', 'https://')) and args.target.lower().endswith('.txt'):
+            with open(args.target, 'r', encoding='utf-8') as f:
+                targets = [line.strip() for line in f.readlines() if line.strip()]
+            summary_target = f"目标列表: {args.target} ({len(targets)} 项)"
+        else:
+            targets = [args.target]
+            summary_target = args.target
+        agg = {
+            'total_files': 0,
+            'scanned_files': 0,
+            'scanned_urls': 0,
+            'total_issues': 0,
+            'suspicious_links': [],
+            'hidden_elements': [],
+            'keyword_matches': [],
+            'js_issues': [],
+            'css_issues': [],
+            'scan_time': 0
+        }
+        for tgt in targets:
+            if tgt.startswith(('http://', 'https://')):
+                parsed_url = urlparse(tgt)
+                domain = parsed_url.netloc
+                if (re.match(r'^127\.0\.0\.1(:\d+)?$', domain) or 
+                    re.match(r'^localhost(:\d+)?$', domain) or
+                    re.match(r'^10\.\d+\.\d+\.\d+(:\d+)?$', domain) or
+                    re.match(r'^172\.(?:1[6-9]|2\d|3[01])\.\d+\.\d+(:\d+)?$', domain) or
+                    re.match(r'^192\.168\.\d+\.\d+(:\d+)?$', domain)):
+                    config.target_type = 'internal_url'
+                else:
+                    config.target_type = 'external_url'
+            elif os.path.isfile(tgt):
+                config.target_type = 'local_file'
+            elif os.path.isdir(tgt):
+                config.target_type = 'local_directory'
+            else:
+                continue
+            config.target = tgt
+            scanner = Scanner(config)
+            res = scanner.scan()
+            agg['total_files'] += res.get('total_files', 0)
+            agg['scanned_files'] += res.get('scanned_files', 0)
+            agg['scanned_urls'] += res.get('scanned_urls', 0)
+            agg['total_issues'] += res.get('total_issues', 0)
+            agg['suspicious_links'].extend(res.get('suspicious_links', []))
+            agg['hidden_elements'].extend(res.get('hidden_elements', []))
+            agg['keyword_matches'].extend(res.get('keyword_matches', []))
+            agg['js_issues'].extend(res.get('js_issues', []))
+            agg['css_issues'].extend(res.get('css_issues', []))
         end_time = datetime.now()
         duration = str(end_time - start_time)
-        
-        # 创建报告
+        config.target = summary_target
         reporter = Reporter(config)
-        report_file = reporter.generate_report(results, duration)
+        report_file = reporter.generate_report(agg, duration)
         scan_time = (end_time - start_time).total_seconds()
-        
-        # 记录总结
         log_summary(
             logger,
-            total_files=results.get('total_files', 0),
-            scanned_files=results.get('scanned_files', 0),
-            issues_found=results.get('total_issues', 0),
+            total_files=agg.get('total_files', 0),
+            scanned_files=agg.get('scanned_files', 0),
+            issues_found=agg.get('total_issues', 0),
             scan_time=scan_time
         )
-        
         logger.info(f"扫描完成！报告已保存至：{report_file}")
         print(f"\n扫描完成！报告已保存至：{report_file}")
         

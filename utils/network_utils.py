@@ -8,6 +8,7 @@ import os
 import re
 import logging
 import requests
+import ssl
 from typing import Dict, List, Tuple, Optional, Any
 from urllib.parse import urlparse, urljoin
 
@@ -288,6 +289,28 @@ def build_request_session(proxy: Optional[str] = None, timeout: int = 10) -> req
         session.proxies.update(proxies)
         logger.info(f"设置代理: {proxy}")
     
+    # 配置HTTPS适配器，启用兼容旧式TLS重协商
+    class TLSAdapter(requests.adapters.HTTPAdapter):
+        def init_poolmanager(self, *args, **kwargs):
+            ctx = ssl.create_default_context()
+            try:
+                ctx.options |= getattr(ssl, 'OP_LEGACY_SERVER_CONNECT', 0)
+            except Exception:
+                pass
+            kwargs['ssl_context'] = ctx
+            return super().init_poolmanager(*args, **kwargs)
+        def proxy_manager_for(self, *args, **kwargs):
+            ctx = ssl.create_default_context()
+            try:
+                ctx.options |= getattr(ssl, 'OP_LEGACY_SERVER_CONNECT', 0)
+            except Exception:
+                pass
+            kwargs['ssl_context'] = ctx
+            return super().proxy_manager_for(*args, **kwargs)
+    try:
+        session.mount('https://', TLSAdapter(max_retries=3))
+    except Exception:
+        pass
     # 超时需在请求时传递
     
     return session
@@ -344,7 +367,19 @@ def fetch_url_content(url: str, session: Optional[requests.Session] = None, **kw
             temp_session = requests.Session()
             adapter = requests.adapters.HTTPAdapter(max_retries=3)
             temp_session.mount('http://', adapter)
-            temp_session.mount('https://', adapter)
+            try:
+                class TLSAdapter(requests.adapters.HTTPAdapter):
+                    def init_poolmanager(self, *args, **kwargs):
+                        ctx = ssl.create_default_context()
+                        try:
+                            ctx.options |= getattr(ssl, 'OP_LEGACY_SERVER_CONNECT', 0)
+                        except Exception:
+                            pass
+                        kwargs['ssl_context'] = ctx
+                        return super().init_poolmanager(*args, **kwargs)
+                temp_session.mount('https://', TLSAdapter(max_retries=3))
+            except Exception:
+                temp_session.mount('https://', adapter)
             response = temp_session.get(url, timeout=timeout, **kwargs)
         
         response.raise_for_status()
@@ -470,6 +505,15 @@ def extract_urls(text: str, context_type: Optional[str] = None) -> List[Dict[str
             if re.match(r'^\d+$', url):
                 continue
             
+            # 基本过滤：非http且非根相对路径、非伪协议时需校验TLD
+            if not url.lower().startswith(('http://','https://','javascript:','data:')) and not url.startswith('/'):
+                domain_part = url.split('/', 1)[0]
+                tld = domain_part.rsplit('.', 1)[-1].lower() if '.' in domain_part else ''
+                allowed_tlds = {
+                    'com','org','net','cn','cc','io','me','xyz','tk','ga','gq','ml','cf','edu','gov','mil','biz','info'
+                }
+                if tld not in allowed_tlds:
+                    continue
             # 去重
             if url not in urls_set:
                 urls_set.add(url)

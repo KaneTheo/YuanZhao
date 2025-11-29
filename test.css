@@ -1,0 +1,6 @@
+/* normal css */
+@import url("https://fonts.googleapis.com/css?family=Roboto");
+.banner { background-image: url("https://cdn.example.com/images/hero.jpg"); }
+.icon { background-image: url(/assets/icon.png); }
+.cursor { cursor: url("https://static.example.com/cur.cur"), auto; }
+.hidden { display: none; }

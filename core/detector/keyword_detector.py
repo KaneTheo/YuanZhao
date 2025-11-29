@@ -36,6 +36,9 @@ class KeywordDetector:
                     # 去除空行
                     if not parts or all((p.strip() == '' for p in parts)):
                         continue
+                    # 忽略注释行
+                    if parts and parts[0].strip().startswith('#'):
+                        continue
                     if len(parts) < 3:
                         logger.warning(f"关键字文件第{line_num}行格式错误，跳过: {parts}")
                         continue
@@ -69,55 +72,21 @@ class KeywordDetector:
             return False
     
     def _load_default_keywords(self):
-        """加载内置的默认关键字"""
-        default_keywords = [
-            # 博彩类
-            ('bet365', 'gambling', 9),
-            ('皇冠体育', 'gambling', 9),
-            ('时时彩', 'gambling', 9),
-            ('六合彩', 'gambling', 9),
-            ('百家乐', 'gambling', 9),
-            ('赌场', 'gambling', 8),
-            ('赌博', 'gambling', 8),
-            ('彩票', 'gambling', 7),
-            ('投注', 'gambling', 7),
-            
-            # 色情类
-            ('色情', 'porn', 9),
-            ('黄色', 'porn', 9),
-            ('成人', 'porn', 8),
-            ('av', 'porn', 9),
-            ('性爱', 'porn', 9),
-            ('裸体', 'porn', 8),
-            ('性交', 'porn', 9),
-            
-            # 恶意软件类
-            ('木马', 'malware', 10),
-            ('病毒', 'malware', 10),
-            ('后门', 'malware', 10),
-            ('勒索', 'malware', 10),
-            ('挖矿', 'malware', 9),
-            ('病毒下载', 'malware', 9),
-            ('远程控制', 'malware', 9),
-            
-            # 钓鱼类
-            ('钓鱼', 'phishing', 10),
-            ('账号密码', 'phishing', 9),
-            ('银行账号', 'phishing', 10),
-            ('登录验证', 'phishing', 9),
-            ('支付验证', 'phishing', 9),
-            ('验证码', 'phishing', 8),
-            
-            # 其他可疑
-            ('暗链', 'other', 8),
-            ('黑帽SEO', 'other', 8),
-            ('权重传递', 'other', 7),
-            ('网站劫持', 'other', 9),
-        ]
-        
-        self.keywords = default_keywords
-        self._compile_keyword_patterns()
-        logger.info(f"使用默认关键字，共 {len(self.keywords)} 个")
+        """默认从项目根目录读取 keywords_example.txt"""
+        import os
+        try:
+            root = os.getcwd()
+            path = os.path.join(root, 'keywords_example.txt')
+            if os.path.exists(path):
+                self.load_keywords(path)
+                return
+            logger.warning("未找到默认关键字文件 keywords_example.txt，关键字功能将受限")
+            self.keywords = []
+            self.keyword_patterns = []
+        except Exception as e:
+            logger.error(f"加载默认关键字失败: {str(e)}")
+            self.keywords = []
+            self.keyword_patterns = []
     
     def _compile_keyword_patterns(self):
         """编译关键字正则表达式模式"""

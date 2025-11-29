@@ -172,26 +172,21 @@ class CSSDetector:
         """
         results = []
         
-        # 使用css_utils中的函数检测隐藏元素
         hidden_elements = detect_hidden_elements(content)
         
         for element_info in hidden_elements:
-            # 根据隐藏技术确定风险等级
-            risk_level = element_info.get('risk_level', 3)
-            
-            # 如果同时使用多种隐藏技术，增加风险等级
-            techniques = element_info.get('techniques', [])
-            if len(techniques) >= 2:
-                risk_level = min(5, risk_level + 1)
-            
+            t = (element_info.get('type', '') or '').lower()
+            if t in ['display: none', 'visibility: hidden']:
+                continue
+            risk_level = 3
             result = {
                 'type': 'hidden_element',
                 'file_path': file_path,
                 'selector': element_info.get('selector', ''),
-                'techniques': techniques,
+                'techniques': [element_info.get('type', '')],
                 'risk_level': risk_level,
-                'description': f"发现隐藏元素，使用{len(techniques)}种隐藏技术",
-                'context': element_info.get('context', '')
+                'description': f"发现隐藏元素: {element_info.get('type', '')}",
+                'context': element_info.get('css', '')
             }
             results.append(result)
         
@@ -248,14 +243,25 @@ class CSSDetector:
         suspicious_selectors = detect_suspicious_selectors(content)
         
         for selector_info in suspicious_selectors:
+            st = selector_info.get('type', '')
+            sel = selector_info.get('selector', '')
+            rl = 2
+            if st in ['long_random_class','long_random_id']:
+                tokens = re.findall(r'\.([A-Za-z0-9_-]+)|#([A-Za-z0-9_-]+)', sel)
+                lengths = [len(t[0] or t[1]) for t in tokens if (t[0] or t[1])]
+                max_len = max(lengths) if lengths else 0
+                if max_len >= 15:
+                    rl = 3
+            if rl < 3:
+                continue
             result = {
                 'type': 'suspicious_selector',
                 'file_path': file_path,
-                'selector': selector_info.get('selector', ''),
-                'reason': selector_info.get('reason', '可疑选择器'),
-                'risk_level': selector_info.get('risk_level', 3),
-                'description': selector_info.get('description', '检测到可疑CSS选择器'),
-                'context': selector_info.get('context', '')
+                'selector': sel,
+                'reason': '可疑选择器',
+                'risk_level': rl,
+                'description': '检测到可疑CSS选择器',
+                'context': ''
             }
             results.append(result)
         
@@ -311,15 +317,29 @@ class CSSDetector:
             if prop_name in self.suspicious_properties:
                 for pattern in self.suspicious_properties[prop_name]:
                     if pattern.search(prop_value):
-                        # 确定风险等级
                         risk_level = 3
                         if 'javascript:' in prop_value:
                             risk_level = 5
                         elif 'data:' in prop_value:
                             risk_level = 4
                         elif 'http' in prop_value:
-                            risk_level = 3
-                        
+                            if prop_name == 'background-image':
+                                m = re.search(r'url\(\s*["\']?([^"\')]+)', prop_value)
+                                link = m.group(1).lower() if m else ''
+                                ext = ''
+                                try:
+                                    path = link.split('?', 1)[0].split('#', 1)[0]
+                                    ext = path.rsplit('.', 1)[-1]
+                                except Exception:
+                                    ext = ''
+                                img_exts = {'png','jpg','jpeg','gif','svg','webp','ico','bmp'}
+                                tlds_suspicious = (link.endswith('.tk') or link.endswith('.ga') or link.endswith('.gq') or link.endswith('.ml') or link.endswith('.cf'))
+                                if ext in img_exts and not tlds_suspicious:
+                                    continue
+                                if tlds_suspicious:
+                                    risk_level = 4
+                            else:
+                                risk_level = 3
                         result = {
                             'type': 'suspicious_property',
                             'file_path': file_path,
@@ -391,11 +411,21 @@ class CSSDetector:
                 else:
                     reasons.append('Data URL')
             elif is_external_link(url):
-                risk_level = 3
-                reasons.append('外部链接')
-                # 检查是否包含可疑域名特征
-                if any(pattern in url.lower() for pattern in ['.cn/', 'cdn.', 'static.', 'assets.']):
-                    risk_level = min(4, risk_level + 1)
+                lower = url.lower()
+                ext = ''
+                try:
+                    path = lower.split('?', 1)[0].split('#', 1)[0]
+                    ext = path.rsplit('.', 1)[-1]
+                except Exception:
+                    ext = ''
+                img_exts = {'png','jpg','jpeg','gif','svg','webp','ico','bmp'}
+                tlds_suspicious = (lower.endswith('.tk') or lower.endswith('.ga') or lower.endswith('.gq') or lower.endswith('.ml') or lower.endswith('.cf'))
+                if property_name in ['background-image','cursor','filter'] and (ext not in img_exts or tlds_suspicious):
+                    risk_level = 3
+                    reasons.append('外部链接')
+                    if tlds_suspicious:
+                        risk_level = 4
+                        reasons.append('可疑TLD')
             
             if risk_level >= 3:
                 result = {
@@ -440,11 +470,12 @@ class CSSDetector:
             if is_external_link(import_url):
                 risk_level = 3
                 reasons.append('外部CSS导入')
-                
-                # 检查是否为可疑域名
-                if any(pattern in import_url.lower() for pattern in ['unknown', 'cdn', 'static', 'temp']):
+                lower = import_url.lower()
+                if lower.endswith('.tk') or lower.endswith('.ga') or lower.endswith('.gq') or lower.endswith('.ml') or lower.endswith('.cf'):
                     risk_level = 4
-                    reasons.append('可疑域名')
+                    reasons.append('可疑TLD')
+                if any(p in lower for p in ['cdn.', 'static.', 'assets.', 'fonts.googleapis.com']):
+                    risk_level = max(2, risk_level - 1)
             
             if risk_level >= 3:
                 result = {
@@ -627,34 +658,34 @@ class CSSDetector:
         results = []
         
         # 使用css_utils中的函数分析复杂度
-        complexity_info = analyze_complexity(content)
+        complexity_info = analyze_css_complexity(content)
         
         # 检查选择器复杂度
-        if complexity_info['selector_complexity'] > 100:
+        if complexity_info.get('selector_count', 0) > 200:
             risk_level = 3
-            if complexity_info['selector_complexity'] > 500:
+            if complexity_info.get('selector_count', 0) > 800:
                 risk_level = 4
             
             result = {
                 'type': 'css_complexity',
                 'file_path': file_path,
-                'selector_complexity': complexity_info['selector_complexity'],
+                'selector_complexity': complexity_info.get('selector_count', 0),
                 'risk_level': risk_level,
-                'description': f"CSS选择器复杂度较高 ({complexity_info['selector_complexity']})，可能影响性能或包含混淆",
+                'description': f"CSS选择器复杂度较高 ({complexity_info.get('selector_count', 0)})，可能影响性能或包含混淆",
                 'context': content[:200] + ('...' if len(content) > 200 else '')
             }
             results.append(result)
         
         # 检查规则数量
-        if complexity_info['rule_count'] > 500:
+        if complexity_info.get('rule_count', 0) > 500:
             risk_level = 2
-            if complexity_info['rule_count'] > 1000:
+            if complexity_info.get('rule_count', 0) > 1000:
                 risk_level = 3
             
             result = {
                 'type': 'css_complexity',
                 'file_path': file_path,
-                'rule_count': complexity_info['rule_count'],
+                'rule_count': complexity_info.get('rule_count', 0),
                 'risk_level': risk_level,
                 'description': f"CSS文件包含大量规则 ({complexity_info['rule_count']}个)，可能包含冗余或混淆",
                 'context': content[:200] + ('...' if len(content) > 200 else '')
@@ -663,15 +694,18 @@ class CSSDetector:
         
         # 检测重复规则
         duplicate_rules = find_duplicate_rules(content)
-        if duplicate_rules['duplicate_count'] > 10:
+        dup_count = len(duplicate_rules) if isinstance(duplicate_rules, list) else 0
+        if dup_count > 10:
+            sample = ''
+            if isinstance(duplicate_rules, list) and duplicate_rules:
+                sample = duplicate_rules[0].get('css_body', '')
             result = {
                 'type': 'css_duplication',
                 'file_path': file_path,
-                'duplicate_count': duplicate_rules['duplicate_count'],
-                'duplicate_percentage': duplicate_rules['duplicate_percentage'],
+                'duplicate_count': dup_count,
                 'risk_level': 2,
-                'description': f"CSS文件包含{duplicate_rules['duplicate_count']}个重复规则 ({duplicate_rules['duplicate_percentage']}%的代码重复)",
-                'context': duplicate_rules.get('sample', '')[:200] + ('...' if len(duplicate_rules.get('sample', '')) > 200 else '')
+                'description': f"CSS文件包含{dup_count}个重复规则",
+                'context': sample[:200] + ('...' if len(sample) > 200 else '')
             }
             results.append(result)
         

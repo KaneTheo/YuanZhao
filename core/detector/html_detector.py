@@ -121,7 +121,7 @@ class HTMLDetector:
             context = url_obj['context']
             
             # 计算风险等级
-            risk_level, reason = self._calculate_url_risk(url, context)
+            risk_level, reason = self._calculate_url_risk(url, context, file_path)
             
             if risk_level > 0:
                 result = {
@@ -136,7 +136,7 @@ class HTMLDetector:
         
         return results
     
-    def _calculate_url_risk(self, url: str, context: str) -> tuple:
+    def _calculate_url_risk(self, url: str, context: str, source: str) -> tuple:
         """
         计算URL的风险等级
         
@@ -150,20 +150,57 @@ class HTMLDetector:
         risk_level = 0
         reason = []
         
-        # 检测外部链接
-        if url.lower().startswith(('http://', 'https://')):
-            risk_level += 2  # 提高外部链接的基础风险等级
-            reason.append('外部链接')
+        # 外部/内部链接判断
+        source_domain = None
+        try:
+            if isinstance(source, str) and source.startswith(('http://', 'https://')):
+                source_domain = extract_domain(source)
+        except Exception:
+            source_domain = None
+        is_abs = url.lower().startswith(('http://', 'https://'))
+        if is_abs:
+            # 仅对跨域外部链接提高基础风险
+            try:
+                link_domain = extract_domain(url)
+            except Exception:
+                link_domain = None
+            from utils.network_utils import is_external_link
+            trusted_domains = {
+                # JS/CSS 通用CDN
+                'cdn.jsdelivr.net', 'cdnjs.cloudflare.com', 'code.jquery.com', 'ajax.googleapis.com',
+                'fonts.googleapis.com', 'fonts.gstatic.com', 'unpkg.com', 'www.unpkg.com',
+                'lib.baomitu.com', 'cdn.staticfile.org', 'staticfile.org', 'stackpath.bootstrapcdn.com',
+                'maxcdn.bootstrapcdn.com', 'bootcss.com', 'cdn.bootcss.com', 'bootcdn.net', 'cdn.bootcdn.net',
+                # 常见站点/资源域（降低误报）
+                'hm.baidu.com', 'www.googletagmanager.com', 'busuanzi.ibruce.info',
+                'seccdn.libravatar.org', 'registry.npmmirror.com', 'icp.gov.moe',
+                'www.bilibili.com', 'hexo.io'
+            }
+            def _is_trusted(domain: str) -> bool:
+                if not domain:
+                    return False
+                for td in trusted_domains:
+                    if domain == td or domain.endswith('.' + td):
+                        return True
+                return False
+            if _is_trusted(link_domain):
+                return 0, '可信CDN域名'
+            elif is_external_link(url, source_domain):
+                risk_level += 2
+                reason.append('外部链接')
             
-            # 检测可疑域名后缀
-            suspicious_tlds = ['pro', 'xyz', 'pw', 'top', 'loan', 'win', 'bid', 'online']
+            # 检测可疑域名后缀（跨域时才计入）
+            suspicious_tlds = ['pro', 'pw', 'top', 'loan', 'win', 'bid', 'online', 'tk', 'ga', 'gq', 'ml', 'cf']
             parsed_url = urlparse(url)
             domain = parsed_url.netloc
-            for tld in suspicious_tlds:
-                if domain.endswith('.' + tld):
-                    risk_level += 2
-                    reason.append(f'使用高风险域名后缀: {tld}')
-                    break
+            if _is_trusted(link_domain):
+                pass
+            elif is_external_link(url, source_domain):
+                for tld in suspicious_tlds:
+                    if domain.endswith('.' + tld):
+                        risk_level += 2
+                        reason.append(f'高风险域名后缀: {tld}')
+                        break
             
             # 检测短随机字符串域名
             domain_parts = domain.split('.')
@@ -196,9 +233,13 @@ class HTMLDetector:
         # 检查是否匹配可疑域名模式
         for pattern in self.suspicious_domain_patterns:
             if pattern.search(url):
-                risk_level += 2
-                reason.append('匹配可疑域名模式')
-                break
+                # 同域名不计入可疑域名模式
+                if is_abs and source_domain and not is_external_link(url, source_domain):
+                    pass
+                else:
+                    risk_level += 2
+                    reason.append('匹配可疑域名模式')
+                    break
         
         # 检查上下文是否包含可疑关键词
         suspicious_context_keywords = ['hidden', 'display:none', 'visibility:hidden', 'opacity:0']
@@ -212,7 +253,16 @@ class HTMLDetector:
         if url.lower().startswith('javascript:'):
             risk_level += 4
             reason.append('JavaScript伪协议')
-        
+
+        # 对相对路径与同域资源降低风险
+        if not is_abs:
+            if url.startswith('/'):
+                # 同域相对路径，不计风险
+                return 0, ''
+            # 非协议/非根路径的文本片段，不计风险
+            if not url.lower().startswith(('javascript:', 'data:')):
+                return 0, ''
+
         return risk_level, ', '.join(reason)
     
     def _detect_suspicious_patterns(self, file_path: str, content: str) -> List[Dict[str, Any]]:
@@ -253,17 +303,40 @@ class HTMLDetector:
         for script in script_tags:
             is_inline = script.get('inline') if 'inline' in script else (not script.get('src') and bool(script.get('content')))
             if is_inline:
-                # 统计脚本长度
-                script_length = len(script['content'])
-                
+                script_text = script.get('content', '') or ''
+                script_length = len(script_text)
+                # 计算位置，避免缺少start_pos/end_pos导致异常
+                pos = 0
+                try:
+                    original = script.get('original_tag', '') or ''
+                    if original:
+                        idx = content.find(original)
+                        if idx >= 0:
+                            pos = idx
+                        else:
+                            # 回退使用脚本内容定位
+                            cidx = content.find(script_text[:50]) if script_text else -1
+                            pos = cidx if cidx >= 0 else 0
+                    else:
+                        # 使用src或部分内容定位
+                        src = script.get('src', '') or ''
+                        if src:
+                            import re as _re
+                            m = _re.search(r'<script[^>]*src=["\']' + _re.escape(src) + r'["\']', content, _re.IGNORECASE)
+                            pos = m.start() if m else 0
+                        else:
+                            cidx = content.find(script_text[:50]) if script_text else -1
+                            pos = cidx if cidx >= 0 else 0
+                except Exception:
+                    pos = 0
                 # 检测复杂内联脚本
                 if script_length > 1000:
-                    context = get_context(content, script['start_pos'], script['end_pos'], 100)
+                    context = get_context(content, pos, 100)
                     result = {
                         'type': 'suspicious_pattern',
                         'file_path': file_path,
                         'pattern': 'large_inline_script',
-                        'matched_content': script['content'][:200] + '...',
+                        'matched_content': script_text[:200] + '...',
                         'risk_level': 2,
                         'description': '大型内联脚本',
                         'context': context

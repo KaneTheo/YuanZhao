@@ -69,6 +69,18 @@ class Scanner:
         self.css_detector = CSSDetector(config)
         self.special_hiding_detector = SpecialHidingDetector(config)
         self.keyword_detector = KeywordDetector(config)
+        try:
+            import os as _os
+            kw_path = None
+            if getattr(config, 'keyword_file', None):
+                kw_path = config.keyword_file
+            else:
+                cand = _os.path.join(_os.getcwd(), 'keywords_example.txt')
+                kw_path = cand if _os.path.exists(cand) else None
+            if kw_path:
+                self.keyword_detector.load_keywords(kw_path)
+        except Exception:
+            pass
         
         # 初始化无头浏览器检测器（如果启用）
         self.headless_browser_detector = None
@@ -375,10 +387,16 @@ class Scanner:
             with self.lock:
                 self.results['scanned_files'] += 1
                 
-                # 计算总问题数
+                # 计算总问题数（按风险阈值过滤）
+                def _risk(i):
+                    try:
+                        return int(i.get('risk_level', 0))
+                    except:
+                        return 0
                 total_issues = 0
                 for key, issues in file_results.items():
-                    total_issues += len(issues)
+                    filtered = [i for i in issues if _risk(i) >= 4]
+                    total_issues += len(filtered)
                 
                 if total_issues > 0:
                     self.results['total_issues'] += total_issues
@@ -387,13 +405,13 @@ class Scanner:
                     if 'keyword_matches' in file_results:
                         issues_list.extend([f"关键字: {m['keyword']}" for m in file_results['keyword_matches']])
                     if 'html_issues' in file_results:
-                        issues_list.extend([f"HTML问题: {m.get('reason', m.get('type', '未知问题'))}" for m in file_results['html_issues']])
+                        issues_list.extend([f"HTML问题: {m.get('reason', m.get('type', '未知问题'))}" for m in file_results['html_issues'] if _risk(m) >= 4])
                     if 'js_issues' in file_results:
-                        issues_list.extend([f"JS问题: {m.get('reason', m.get('type', '未知问题'))}" for m in file_results['js_issues']])
+                        issues_list.extend([f"JS问题: {m.get('reason', m.get('type', '未知问题'))}" for m in file_results['js_issues'] if _risk(m) >= 4])
                     if 'css_issues' in file_results:
-                        issues_list.extend([f"CSS问题: {m.get('reason', m.get('type', '未知问题'))}" for m in file_results['css_issues']])
+                        issues_list.extend([f"CSS问题: {m.get('reason', m.get('type', '未知问题'))}" for m in file_results['css_issues'] if _risk(m) >= 4])
                     if 'hiding_techniques' in file_results:
-                        issues_list.extend([f"隐藏技术: {m.get('type', 'unknown')}" for m in file_results['hiding_techniques']])
+                        issues_list.extend(["隐藏技术: " + str(m.get('type', 'unknown')) for m in file_results['hiding_techniques'] if _risk(m) >= 4])
                     
                     log_scan_result(self.logger, file_path, issues_list)
             
@@ -474,7 +492,20 @@ class Scanner:
             )
             adapter = HTTPAdapter(max_retries=retry_strategy)
             session.mount("http://", adapter)
-            session.mount("https://", adapter)
+            try:
+                import ssl
+                class TLSAdapter(HTTPAdapter):
+                    def init_poolmanager(self, *args, **kwargs):
+                        ctx = ssl.create_default_context()
+                        try:
+                            ctx.options |= getattr(ssl, 'OP_LEGACY_SERVER_CONNECT', 0)
+                        except Exception:
+                            pass
+                        kwargs['ssl_context'] = ctx
+                        return super().init_poolmanager(*args, **kwargs)
+                session.mount("https://", TLSAdapter(max_retries=retry_strategy))
+            except Exception:
+                session.mount("https://", adapter)
                    
             # 设置标准浏览器请求头
             headers = {
@@ -608,15 +639,17 @@ class Scanner:
                                             else:
                                                 continue
                                         
-                                    # 规范化URL
+                                    # 规范化与合法性校验
                                     if not full_url.startswith(('http://', 'https://')):
                                         if full_url.startswith('//'):
                                             full_url = f"https:{full_url}"
-                                        else:
-                                            # 基于当前域名构建完整URL
+                                        elif full_url.startswith('/'):
                                             parsed = urlparse(url)
                                             base_url = f"{parsed.scheme}://{parsed.netloc}"
-                                            full_url = base_url + '/' + full_url.lstrip('/')
+                                            full_url = base_url + full_url
+                                        else:
+                                            # 非协议/非根路径的片段，跳过
+                                            continue
                                         
                                     issue['url'] = full_url
                                     issue['link'] = full_url

@@ -284,7 +284,23 @@ class Reporter:
                         if matches:
                             suspicious_link_details.append(matches[0])
             
-            for i, link in enumerate(results['suspicious_links'], 1):
+            def _risk_value(v):
+                try:
+                    if isinstance(v, str):
+                        lv = v.strip()
+                        if lv in ['高', 'high', 'HIGH']:
+                            return 3
+                        if lv in ['中', 'medium', 'MEDIUM']:
+                            return 2
+                        if lv in ['低', 'low', 'LOW']:
+                            return 1
+                        return int(lv)
+                    return int(v)
+                except:
+                    return 0
+            filtered_links = [l for l in results['suspicious_links'] if _risk_value(l.get('risk_level')) >= 4]
+            sorted_links = sorted(filtered_links, key=lambda x: _risk_value(x.get('risk_level')), reverse=True)
+            for i, link in enumerate(sorted_links, 1):
                 risk_class = self._get_risk_class(link.get('risk_level', ''))
                 # 获取问题详情，如果有日志中的信息就使用
                 context_info = (link.get('context', '')[:100] + '...') if link.get('context') else ''
@@ -339,14 +355,23 @@ class Reporter:
                         <th>类别</th>
                         <th>风险权重</th>
                         <th>来源</th>
+                        <th>链接</th>
                         <th>上下文</th>
                     </tr>
                 </thead>
                 <tbody>
 """
             
+            import re as _re
             for i, match in enumerate(results['keyword_matches'], 1):
                 risk_class = self._get_keyword_risk_class(match.get('weight', 0))
+                ctx_raw = (match.get('context', '') or '')
+                urls = _re.findall(r'https?://[^\s\'"<>]+', ctx_raw)
+                links_html = ''
+                if urls:
+                    links_html = ''.join([f'<div class="context"><a href="{_escape_html(u)}" target="_blank">{_escape_html(u)}</a></div>' for u in urls[:5]])
+                else:
+                    links_html = '<div class="context">N/A</div>'
                 html_content += f"""
                     <tr>
                         <td>{i}</td>
@@ -354,7 +379,8 @@ class Reporter:
                         <td>{_escape_html(match.get('category', 'N/A'))}</td>
                         <td class="{risk_class}">{match.get('weight', 'N/A')}</td>
                         <td>{_escape_html(match.get('source', 'N/A'))}</td>
-                        <td><div class="context">{_escape_html((match.get('context', '') or '')[:100])}...</div></td>
+                        <td>{links_html}</td>
+                        <td><div class="context">{_escape_html(ctx_raw[:200])}{'...' if len(ctx_raw) > 200 else ''}</div></td>
                     </tr>
 """
             
@@ -496,11 +522,24 @@ class Reporter:
     
     def _get_risk_class(self, risk_level):
         """根据风险等级返回CSS类名"""
-        if risk_level in ['高', 'high', 'HIGH']:
-            return 'risk-high'
-        elif risk_level in ['中', 'medium', 'MEDIUM']:
-            return 'risk-medium'
-        else:
+        try:
+            if isinstance(risk_level, str):
+                lv = risk_level.strip()
+                if lv in ['高', 'high', 'HIGH']:
+                    return 'risk-high'
+                if lv in ['中', 'medium', 'MEDIUM']:
+                    return 'risk-medium'
+                if lv in ['低', 'low', 'LOW']:
+                    return 'risk-low'
+                iv = int(lv)
+            else:
+                iv = int(risk_level)
+            if iv >= 8:
+                return 'risk-high'
+            if iv >= 5:
+                return 'risk-medium'
+            return 'risk-low'
+        except:
             return 'risk-low'
     
     def _get_keyword_risk_class(self, weight):
