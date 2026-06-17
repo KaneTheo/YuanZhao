@@ -279,6 +279,7 @@ pytest
 pytest tests/test_detectors/
 pytest tests/test_integration.py
 
+<<<<<<< HEAD
 # 显示详细输出
 pytest -v
 
@@ -295,3 +296,12 @@ ruff check yuanzhao/ tests/
 <p align="center">
   <a href="https://github.com/KaneTheo/YuanZhao">GitHub 仓库</a>
 </p>
+=======
+<a href="https://www.star-history.com/#KaneTheo/YuanZhao&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=KaneTheo/YuanZhao&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=KaneTheo/YuanZhao&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=KaneTheo/YuanZhao&type=date&legend=top-left" />
+ </picture>
+</a>
+>>>>>>> 1bcb07e3cdd3f4fb5780f61bba01ec1f2410c044
