@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="refresh" content="0;url=https://evil.example.com/phishing">
+<title>测试页面</title>
+<style>
+  .hidden-div { display: none; }
+  .invisible-span { visibility: hidden; }
+  .zero-opacity { opacity: 0; }
+  .off-screen { position: absolute; left: -9999px; }
+  .tiny-font { font-size: 0; }
+  .same-color { color: #ffffff; background-color: #fff; }
+</style>
+</head>
+<body>
+<h1>欢迎</h1>
+
+<!-- hidden password: admin123 -->
+<!-- This is a base64 encoded comment: dGVzdF9kYXRh -->
+<a href="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js">CDN</a>
+<a href="javascript:eval(atob('YWxlcnQoJ1hTUycp'))">点击</a>
+<a href="https://malware.xyz/bad.exe">下载</a>
+<a href="https://bit.ly/short-link">短链接</a>
+<a href="https://example.com/redirect?origin=evil.com">跳转</a>
+<a href="https://suspicious.pro/hack">可疑域名</a>
+<a href="http://192.168.1.100:8443/admin">内网</a>
+
+<div style="display:none">隐藏的暗链 <a href="https://hidden-spam.xyz/buy">购买</a></div>
+<div style="visibility:hidden">不可见元素</div>
+<span style="opacity:0">透明文字</span>
+<p style="font-size:0">零号字体</p>
+<section style="position:absolute;left:-2000px">屏幕外</section>
+<article style="text-indent:-999px">负缩进</article>
+<div style="color:#000;background-color:#000000">相同颜色</div>
+
+<iframe src="https://external.example.com/widget"></iframe>
+
+<div class="nested"><span><p>三层嵌套</p></span></div>
+
+<script>
+  eval("var x = 1");
+  document.write("<p>动态内容</p>");
+  document.cookie = "session=abc123";
+  var userAgent = navigator.userAgent;
+  atob("dGVzdA==");
+
+  // exploit backdoor hidden here
+  /* trojan malware keylogger */
+
+  var _0x1a2b = ['\x68\x65\x6c\x6c\x6f'];
+  var str = 'abc' + 'def';
+  (function(){ eval('x') })();
+</script>
+
+<p>正常内容，没有暗链。</p>
+
+&#104;&#116;&#116;&#112;&#115;&#58;&#47;&#47;&#101;&#118;&#105;&#108;&#46;&#99;&#111;&#109;
+</body>
+</html>

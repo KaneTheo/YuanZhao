@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>渊照扫描报告 — {{ target }}</title>
+<style>
+  :root {
+    --critical: #dc2626; --high: #ea580c; --medium: #ca8a04; --low: #2563eb;
+    --bg: #f8fafc; --card: #fff; --text: #1e293b; --muted: #64748b;
+    --border: #e2e8f0; --radius: 12px;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.6;
+  }
+
+  /* 顶部横幅 */
+  .banner {
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+    color: #fff; padding: 36px 0;
+  }
+  .banner-inner { max-width: 1200px; margin:0 auto; padding:0 24px; }
+  .banner h1 { font-size: 26px; margin-bottom: 4px; }
+  .banner .subtitle { color: #94a3b8; font-size: 14px; }
+  .banner .meta { margin-top: 16px; display:flex; gap:24px; flex-wrap:wrap; font-size:13px; color:#cbd5e1; }
+  .banner .meta span { opacity:.75; }
+
+  /* 风险等级横幅 */
+  .risk-bar {
+    max-width: 1200px; margin: -20px auto 0; padding:0 24px; position:relative; z-index:2;
+  }
+  .risk-bar-inner {
+    background: var(--card); border-radius: var(--radius);
+    box-shadow: 0 4px 24px rgba(0,0,0,.08);
+    padding: 24px 32px; display:flex; align-items:center; gap:32px;
+    flex-wrap: wrap;
+  }
+  .risk-score {
+    width: 80px; height: 80px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 28px; font-weight: 800; color: #fff; flex-shrink: 0;
+  }
+  .risk-score.critical { background: var(--critical); }
+  .risk-score.high { background: var(--high); }
+  .risk-score.medium { background: var(--medium); }
+  .risk-score.low { background: var(--low); }
+  .risk-level { font-size: 20px; font-weight: 700; }
+  .risk-level.critical { color: var(--critical); }
+  .risk-level.high { color: var(--high); }
+  .risk-level.medium { color: var(--medium); }
+  .risk-level.low { color: var(--low); }
+  .risk-desc { font-size: 14px; color: var(--muted); margin-top: 2px; }
+
+  /* 严重程度分布条 */
+  .severity-bar-wrap { flex:1; min-width: 200px; }
+  .severity-bar {
+    display:flex; height:10px; border-radius:5px; overflow:hidden; margin-bottom:10px;
+  }
+  .severity-bar .seg-critical { background:var(--critical); }
+  .severity-bar .seg-high { background:var(--high); }
+  .severity-bar .seg-medium { background:var(--medium); }
+  .severity-bar .seg-low { background:var(--low); }
+  .severity-legend { display:flex; gap:16px; font-size:12px; color:var(--muted); flex-wrap:wrap; }
+  .severity-legend .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:4px; }
+  .severity-legend .dot.critical { background:var(--critical); }
+  .severity-legend .dot.high { background:var(--high); }
+  .severity-legend .dot.medium { background:var(--medium); }
+  .severity-legend .dot.low { background:var(--low); }
+
+  /* 主内容 */
+  .content { max-width: 1200px; margin:24px auto; padding:0 24px; }
+
+  /* 卡片 */
+  .card {
+    background: var(--card); border-radius: var(--radius); margin-bottom: 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06); border: 1px solid var(--border);
+  }
+  .card-header {
+    padding: 18px 24px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between; gap:12px;
+  }
+  .card-header h2 { font-size: 17px; display: flex; align-items: center; gap: 8px; }
+  .card-body { padding: 0; overflow-x: auto; }
+
+  /* 表格 */
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  thead th {
+    text-align:left; padding:10px 16px; background:#f1f5f9;
+    font-size:12px; font-weight:600; color:var(--muted); text-transform:uppercase;
+    letter-spacing:.5px; border-bottom:2px solid var(--border); white-space:nowrap;
+  }
+  tbody td { padding:12px 16px; border-bottom:1px solid var(--border); vertical-align:top; }
+  tbody tr:last-child td { border-bottom:none; }
+  tbody tr:hover { background: #f8fafc; }
+
+  /* 证据/上下文的代码风格 */
+  code.evidence {
+    font-family: 'SF Mono','Cascadia Code','Consolas',monospace;
+    font-size:13px; background:#fef2f2; color:#b91c1c;
+    padding:2px 8px; border-radius:4px; word-break:break-all;
+  }
+  code.context {
+    font-family: 'SF Mono','Cascadia Code','Consolas',monospace;
+    font-size:12px; background:#f1f5f9; color:var(--text);
+    padding:4px 10px; border-radius:4px; display:block;
+    max-height:60px; overflow-y:auto; word-break:break-all; white-space:pre-wrap;
+  }
+
+  /* 严重程度标签 */
+  .sev {
+    display:inline-block; padding:2px 10px; border-radius:20px;
+    font-size:12px; font-weight:700; text-align:center; min-width:28px;
+  }
+  .sev-8,.sev-9,.sev-10 { background:#fef2f2; color:var(--critical); }
+  .sev-5,.sev-6,.sev-7 { background:#fff7ed; color:var(--high); }
+  .sev-3,.sev-4 { background:#fefce8; color:var(--medium); }
+  .sev-1,.sev-2 { background:#eff6ff; color:var(--low); }
+
+  /* 标签 */
+  .tag {
+    display:inline-block; padding:1px 8px; border-radius:12px; font-size:11px; font-weight:600;
+  }
+  .tag-danger { background:#fef2f2; color:var(--critical); }
+  .tag-warning { background:#fff7ed; color:var(--high); }
+  .tag-info { background:#e0f2fe; color:#0369a1; }
+
+  /* 理由列表 */
+  .reasons { display:flex; gap:4px; flex-wrap:wrap; margin-top:4px; }
+  .reason { font-size:11px; background:#f1f5f9; color:var(--muted); padding:1px 8px; border-radius:10px; }
+
+  /* 元数据行 */
+  .meta-row { font-size:12px; color:var(--muted); margin-top:2px; }
+
+  /* 无结果提示 */
+  .empty { padding:40px 24px; text-align:center; color:var(--muted); }
+  .empty .icon { font-size:32px; margin-bottom:8px; }
+
+  /* AI 提示横幅 */
+  .ai-notice {
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+    border: 2px solid #f59e0b; border-radius: var(--radius);
+    padding: 20px 28px; margin-bottom: 20px;
+    display: flex; align-items: flex-start; gap: 16px;
+  }
+  .ai-notice .icon { font-size: 32px; flex-shrink: 0; line-height: 1; }
+  .ai-notice .body { flex: 1; }
+  .ai-notice .title { font-size: 16px; font-weight: 800; color: #92400e; margin-bottom: 4px; }
+  .ai-notice .desc { font-size: 14px; color: #78350f; line-height: 1.6; }
+  .ai-notice .desc strong { color: #b45309; }
+  .ai-notice .desc code {
+    background: #fef3c7; border: 1px solid #fbbf24; color: #92400e;
+    padding: 1px 6px; border-radius: 4px; font-size: 13px; font-family: inherit;
+  }
+
+  /* 统计网格 */
+  .stats-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 16px;
+    padding: 20px 24px;
+  }
+  .stat { text-align:center; }
+  .stat .num { font-size: 32px; font-weight: 800; }
+  .stat .num.danger { color: var(--critical); }
+  .stat .num.warning { color: var(--high); }
+  .stat .lbl { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+  /* 页脚 */
+  .footer {
+    text-align:center; padding: 32px 24px; color: var(--muted); font-size: 13px;
+    border-top: 1px solid var(--border); margin-top: 16px;
+  }
+  .footer a { color: #0369a1; text-decoration: none; }
+
+  /* 响应式 */
+  @media (max-width:768px) {
+    .risk-bar-inner { flex-direction:column; text-align:center; }
+    .stats-grid { grid-template-columns: repeat(3, 1fr); }
+    table { font-size:12px; }
+    thead th, tbody td { padding:8px 10px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ====== 顶部 ====== -->
+<div class="banner">
+  <div class="banner-inner">
+    <h1>渊照 YuanZhao — 暗链扫描报告</h1>
+    <p class="subtitle">专业暗链检测与安全审计</p>
+    <div class="meta">
+      <span>目标：<strong>{{ target }}</strong></span>
+      <span>模式：<strong>{{ mode }}</strong></span>
+      <span>耗时：<strong>{{ duration }}</strong></span>
+      <span>扫描文件：<strong>{{ scanned_files }}</strong></span>
+      <span>扫描 URL：<strong>{{ scanned_urls }}</strong></span>
+      <span>生成时间：<strong>{{ generated_at }}</strong></span>
+    </div>
+  </div>
+</div>
+
+<!-- ====== 风险评估总览 ====== -->
+<div class="risk-bar">
+  <div class="risk-bar-inner">
+    {% set risk_level = 'critical' if critical > 0 else 'high' if high > 0 else 'medium' if total_findings > 0 else 'low' %}
+    <div class="risk-score {{ risk_level }}">
+      {{ total_findings }}
+    </div>
+    <div>
+      <div class="risk-level {{ risk_level }}">
+        {% if risk_level == 'critical' %}⚠ 高风险 — 发现严重安全问题
+        {% elif risk_level == 'high' %}⚠ 中高风险 — 存在较多可疑项
+        {% elif risk_level == 'medium' %}⚡ 中等风险 — 存在一些可疑项
+        {% else %}✓ 低风险 — 未发现明显问题
+        {% endif %}
+      </div>
+      <div class="risk-desc">
+        {% if critical + high > 0 %}
+        共发现 <strong>{{ total_findings }}</strong> 个问题，其中
+        <span style="color:var(--critical)">{{ critical }} 个严重</span>、
+        <span style="color:var(--high)">{{ high }} 个高危</span>，
+        建议优先处理严重程度 ≥ 5 的项目。
+        {% else %}
+        共发现 {{ total_findings }} 个低风险项，暂无紧急处理需求。
+        {% endif %}
+      </div>
+    </div>
+    <div class="severity-bar-wrap">
+      <div class="severity-bar">
+        <div class="seg-critical" style="width:{{ (critical / total_findings * 100) if total_findings else 0 }}%"></div>
+        <div class="seg-high" style="width:{{ (high / total_findings * 100) if total_findings else 0 }}%"></div>
+        <div class="seg-medium" style="width:{{ (medium / total_findings * 100) if total_findings else 0 }}%"></div>
+        <div class="seg-low" style="width:{{ (low / total_findings * 100) if total_findings else 0 }}%"></div>
+      </div>
+      <div class="severity-legend">
+        <span><span class="dot critical"></span>严重 (8-10)：{{ critical }}</span>
+        <span><span class="dot high"></span>高危 (5-7)：{{ high }}</span>
+        <span><span class="dot medium"></span>中危 (3-4)：{{ medium }}</span>
+        <span><span class="dot low"></span>低危 (1-2)：{{ low }}</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ====== 统计总览 ====== -->
+<div class="content">
+  <div class="card">
+    <div class="card-header"><h2>📊 发现分类统计</h2></div>
+    <div class="stats-grid">
+      {% for label, count, cls, _ in categories %}
+      <div class="stat">
+        <div class="num {{ cls }}">{{ count }}</div>
+        <div class="lbl">{{ label }}</div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- ====== AI 报告解析建议 ====== -->
+  <div class="ai-notice">
+    <span class="icon">🤖</span>
+    <div class="body">
+      <div class="title">建议将本报告发送给 AI 工具进行二次分析</div>
+      <div class="desc">
+        暗链扫描检测规则不可避免地存在<strong>误报（正常内容被误判）</strong>和<strong>噪音（低风险项过多）</strong>。
+        建议将本 HTML 文件发送给 <strong>Claude、ChatGPT</strong> 等 AI 工具，让 AI 结合上下文帮你：
+        ① 剔除误报（如 CDN 链接、正常的外部资源）；
+        ② 聚焦真正可疑的高危项；
+        ③ 分析隐藏手法的实际意图。
+        <br>操作方法：用浏览器打开本报告 → 另存为 <code>.html</code> → 发送给 AI → 让 AI 逐条审查。
+      </div>
+    </div>
+  </div>
+
+  <!-- ====== 可疑链接 ====== -->
+  {% if suspicious_links %}
+  <div class="card">
+    <div class="card-header">
+      <h2>🔗 可疑链接 <span class="tag tag-danger">{{ suspicious_links|length }}</span></h2>
+      <span style="font-size:12px;color:var(--muted)">外部链接、高风险域名、短链接、非标准端口等</span>
+    </div>
+    <div class="card-body">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:36px">#</th>
+            <th style="min-width:200px">链接</th>
+            <th>风险原因</th>
+            <th style="width:60px">严重程度</th>
+            <th style="min-width:180px">上下文</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for fl in suspicious_links %}
+          <tr>
+            <td style="color:var(--muted)">{{ loop.index }}</td>
+            <td><code class="evidence">{{ fl.evidence[:200] }}{% if fl.evidence|length > 200 %}...{% endif %}</code></td>
+            <td>
+              {% if fl.metadata.get("reasons") %}
+              <div class="reasons">
+                {% for r in fl.metadata.reasons %}
+                <span class="reason">{{ r }}</span>
+                {% endfor %}
+              </div>
+              {% endif %}
+              <div class="meta-row">来源：{{ fl.source_type }} · {{ fl.location[:60] }}</div>
+            </td>
+            <td><span class="sev sev-{{ fl.severity }}">{{ fl.severity }}</span></td>
+            <td><code class="context">{{ fl.context[:300] }}</code></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- ====== 关键字匹配 ====== -->
+  {% if keyword_matches %}
+  <div class="card">
+    <div class="card-header">
+      <h2>🔑 关键字匹配 <span class="tag tag-warning">{{ keyword_matches|length }}</span></h2>
+    </div>
+    <div class="card-body">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:36px">#</th>
+            <th>关键字</th>
+            <th>类别</th>
+            <th style="width:60px">权重</th>
+            <th>来源</th>
+            <th style="min-width:180px">上下文</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for fl in keyword_matches %}
+          <tr>
+            <td style="color:var(--muted)">{{ loop.index }}</td>
+            <td><strong>{{ fl.metadata.get('keyword', fl.evidence) }}</strong></td>
+            <td><span class="tag tag-info">{{ fl.metadata.get('category', 'N/A') }}</span></td>
+            <td><span class="sev sev-{{ fl.severity }}">{{ fl.severity }}</span></td>
+            <td class="meta-row">{{ fl.location[:50] }}</td>
+            <td><code class="context">{{ fl.context[:250] }}</code></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- ====== 隐藏元素 ====== -->
+  {% if hidden_elements %}
+  <div class="card">
+    <div class="card-header">
+      <h2>👁 隐藏元素 <span class="tag tag-warning">{{ hidden_elements|length }}</span></h2>
+      <span style="font-size:12px;color:var(--muted)">CSS 隐藏、定位隐藏、颜色隐藏等手法</span>
+    </div>
+    <div class="card-body">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:36px">#</th>
+            <th>隐藏手法</th>
+            <th>检测证据</th>
+            <th style="width:60px">严重程度</th>
+            <th>来源</th>
+            <th style="min-width:180px">上下文</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for fl in hidden_elements %}
+          <tr>
+            <td style="color:var(--muted)">{{ loop.index }}</td>
+            <td>{{ fl.metadata.get('technique', fl.rule_id) }}</td>
+            <td><code class="evidence">{{ fl.evidence[:120] }}</code></td>
+            <td><span class="sev sev-{{ fl.severity }}">{{ fl.severity }}</span></td>
+            <td class="meta-row">{{ fl.source_type }} · {{ fl.location[:40] }}</td>
+            <td><code class="context">{{ fl.context[:250] }}</code></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- ====== JS 问题 ====== -->
+  {% if js_issues %}
+  <div class="card">
+    <div class="card-header">
+      <h2>📜 JavaScript 问题 <span class="tag tag-info">{{ js_issues|length }}</span></h2>
+      <span style="font-size:12px;color:var(--muted)">高危函数、代码混淆、可疑模式</span>
+    </div>
+    <div class="card-body">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:36px">#</th>
+            <th>规则 ID</th>
+            <th>检测项</th>
+            <th>证据</th>
+            <th style="width:60px">严重程度</th>
+            <th style="min-width:180px">上下文</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for fl in js_issues %}
+          <tr>
+            <td style="color:var(--muted)">{{ loop.index }}</td>
+            <td style="font-size:12px;color:var(--muted)">{{ fl.rule_id }}</td>
+            <td>{{ fl.metadata.get('description', fl.metadata.get('function', fl.metadata.get('pattern', ''))) }}</td>
+            <td><code class="evidence">{{ fl.evidence[:120] }}</code></td>
+            <td><span class="sev sev-{{ fl.severity }}">{{ fl.severity }}</span></td>
+            <td><code class="context">{{ fl.context[:250] }}</code></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- ====== CSS 问题 ====== -->
+  {% if css_issues %}
+  <div class="card">
+    <div class="card-header">
+      <h2>🎨 CSS 问题 <span class="tag tag-info">{{ css_issues|length }}</span></h2>
+      <span style="font-size:12px;color:var(--muted)">异常选择器、外部导入、混淆</span>
+    </div>
+    <div class="card-body">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:36px">#</th>
+            <th>规则 ID</th>
+            <th>证据</th>
+            <th style="width:60px">严重程度</th>
+            <th>上下文</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for fl in css_issues %}
+          <tr>
+            <td style="color:var(--muted)">{{ loop.index }}</td>
+            <td style="font-size:12px;color:var(--muted)">{{ fl.rule_id }}</td>
+            <td><code class="evidence">{{ fl.evidence[:120] }}</code></td>
+            <td><span class="sev sev-{{ fl.severity }}">{{ fl.severity }}</span></td>
+            <td><code class="context">{{ fl.context[:250] }}</code></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- ====== 其他发现 ====== -->
+  {% if other_findings %}
+  <div class="card">
+    <div class="card-header">
+      <h2>📋 其他发现 <span class="tag tag-info">{{ other_findings|length }}</span></h2>
+    </div>
+    <div class="card-body">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:36px">#</th>
+            <th>规则 ID</th>
+            <th>类别</th>
+            <th>证据</th>
+            <th style="width:60px">严重程度</th>
+            <th>上下文</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for fl in other_findings %}
+          <tr>
+            <td style="color:var(--muted)">{{ loop.index }}</td>
+            <td style="font-size:12px;color:var(--muted)">{{ fl.rule_id }}</td>
+            <td>{{ fl.category }}</td>
+            <td><code class="evidence">{{ fl.evidence[:120] }}</code></td>
+            <td><span class="sev sev-{{ fl.severity }}">{{ fl.severity }}</span></td>
+            <td><code class="context">{{ fl.context[:250] }}</code></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- ====== 如果什么都没发现 ====== -->
+  {% if total_findings == 0 %}
+  <div class="card">
+    <div class="empty">
+      <div class="icon">✅</div>
+      <p><strong>未发现任何可疑项</strong></p>
+      <p style="margin-top:4px">该目标在本次扫描中未触发任何检测规则。</p>
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+
+<!-- ====== 页脚 ====== -->
+<div class="footer">
+  <p>由 <a href="https://github.com/KaneTheo/YuanZhao" target="_blank">渊照 YuanZhao v2.0.0</a> 自动生成 · {{ generated_at }}</p>
+  <p style="margin-top:4px">本工具仅供安全测试和应急响应使用，请确保对扫描目标拥有充分授权。</p>
+</div>
+
+</body>
+</html>

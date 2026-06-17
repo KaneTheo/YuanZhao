@@ -1,0 +1,49 @@
+# 渊照自定义规则示例
+# 使用 --rules-file 参数加载，支持通过 YAML 扩展检测能力
+#
+# 格式说明:
+#   rule_id   - 规则唯一标识，建议用自定义前缀避免冲突
+#   pattern   - Python 正则表达式
+#   flags     - 正则标志，可选组合: i(忽略大小写) s(点匹配换行) m(多行)
+#   severity  - 严重程度 1-10
+#   category  - 分类: suspicious_url / hidden_element / keyword_match / js_issue / css_issue / suspicious_pattern
+#   source_type - 来源类型: html / js / css / text / comments / meta / dynamic
+#   description - 规则描述（会写入报告的 metadata）
+#
+# 示例:
+rules:
+  # 检测特定可疑域名
+  - rule_id: "custom:badsite"
+    pattern: 'https?://(?:www\.)?evil-[a-z]+\.(?:com|net|org)'
+    flags: "i"
+    severity: 8
+    category: "suspicious_url"
+    source_type: "html"
+    description: "匹配特定模式的恶意域名"
+
+  # 检测可疑的 PHP 后门函数
+  - rule_id: "custom:php_backdoor"
+    pattern: '(?:assert|eval|exec|system|passthru|shell_exec)\s*\(\s*\$_(?:GET|POST|REQUEST)'
+    flags: "i"
+    severity: 10
+    category: "js_issue"
+    source_type: "js"
+    description: "PHP 后门特征函数"
+
+  # 检测可疑的 base64 编码大段数据
+  - rule_id: "custom:large_base64"
+    pattern: '[A-Za-z0-9+/]{200,}={0,2}'
+    flags: ""
+    severity: 6
+    category: "suspicious_pattern"
+    source_type: "text"
+    description: "异常大的 Base64 编码数据块"
+
+  # 检测隐蔽的跳转代码
+  - rule_id: "custom:stealth_redirect"
+    pattern: '(?:window\.location|document\.location|location\.href)\s*=\s*["\']https?://(?!example\.com)'
+    flags: "i"
+    severity: 7
+    category: "js_issue"
+    source_type: "js"
+    description: "JS 跳转到外部网站"

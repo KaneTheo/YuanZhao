@@ -1,0 +1,88 @@
+# 渊照内置检测规则 (数据与配置)
+
+# === 可信 CDN 域名 ===
+trusted_cdn:
+  - cdn.jsdelivr.net
+  - cdnjs.cloudflare.com
+  - code.jquery.com
+  - ajax.googleapis.com
+  - fonts.googleapis.com
+  - fonts.gstatic.com
+  - unpkg.com
+  - lib.baomitu.com
+  - cdn.staticfile.org
+  - stackpath.bootstrapcdn.com
+  - maxcdn.bootstrapcdn.com
+  - bootcss.com
+  - cdn.bootcdn.net
+  - hm.baidu.com
+  - www.googletagmanager.com
+  - busuanzi.ibruce.info
+  - registry.npmmirror.com
+
+# === 可疑域名后缀 (TLD -> severity) ===
+suspicious_tlds:
+  pro: 2
+  xyz: 2
+  pw: 2
+  top: 2
+  loan: 2
+  win: 2
+  bid: 2
+  online: 2
+  tk: 3
+  ga: 3
+  gq: 3
+  ml: 3
+  cf: 3
+
+# === 短链接服务域名 ===
+short_link_domains:
+  - bit.ly
+  - goo.gl
+  - tinyurl.com
+  - t.co
+  - ow.ly
+  - is.gd
+  - adf.ly
+
+# === JS 高危函数 (name -> severity) ===
+js_high_risk_functions:
+  eval: 5
+  Function: 4
+  execScript: 5
+  setTimeout: 3
+  setInterval: 3
+  innerHTML: 4
+  outerHTML: 4
+  XMLHttpRequest: 3
+  fetch: 3
+  WebSocket: 3
+  unescape: 3
+  decodeURI: 2
+  decodeURIComponent: 2
+  appendChild: 3
+  insertBefore: 3
+  replaceChild: 3
+
+# === CSS 隐藏属性值 ===
+css_hiding_values:
+  display: [none, list-item, table-caption]
+  visibility: [hidden, collapse]
+  opacity: ["0", "0.0", "0.00"]
+  clip: ["rect(0, 0, 0, 0)"]
+  clip-path: ["circle(0)", "polygon(0 0)"]
+  z-index: ["-9999", "-999", "-1000"]
+  height: ["0", "0px", "0%"]
+  width: ["0", "0px", "0%"]
+  overflow: [hidden]
+  text-indent: ["-9999px", "-999px", "-1000px"]
+  transform: ["translateX(-9999px)", "translateY(-9999px)"]
+
+# === 零宽字符列表 ===
+zero_width_chars:
+  - "​"  # 零宽空格
+  - "‌"  # 零宽不连字
+  - "‍"  # 零宽连字
+  - "⁠"  # 字连接符
+  - "﻿"  # BOM

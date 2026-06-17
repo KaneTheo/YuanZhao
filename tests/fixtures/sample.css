@@ -1,0 +1,29 @@
+/* CSS with suspicious patterns */
+
+/* hidden stealth cloaking obfuscate seo spam backlink */
+.hidden { display: none; }
+.stealth { visibility: hidden; opacity: 0; }
+.invisible { height: 0; width: 0; overflow: hidden; }
+.off-screen { position: absolute; left: -9999px; top: -99999px; }
+.tiny { font-size: 0; }
+.indented { text-indent: -9999px; }
+.clipped { clip: rect(0, 0, 0, 0); }
+
+.suspicious-long-class-name-abcdefghijklmnop { color: red; }
+#very_long_id_name_abcdefghijklmnopqrst { color: blue; }
+
+body {
+    background-image: url(https://external.example.com/bg.jpg);
+}
+
+div::after {
+    content: "extra text";
+}
+
+@import url("https://fonts.googleapis.com/css?family=Roboto");
+@import url("https://suspicious.xyz/theme.css");
+
+/* base64 in comment: YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXoxMjM0NTY3ODkwYWJjZGVmZ2hpamtsbW5vcA== */
+
+[href*="javascript:"] { color: red; }
+[data-x-custom] { color: blue; }
