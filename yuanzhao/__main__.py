@@ -51,6 +51,7 @@ def main():
         headless_driver=cfg_dict["headless_driver"],
         headless_timeout=cfg_dict["headless_timeout"],
         js_wait=cfg_dict["js_wait"],
+        user_agent=cfg_dict.get("user_agent", "chrome"),
         rules_file=cfg_dict.get("rules_file"),
     )
 

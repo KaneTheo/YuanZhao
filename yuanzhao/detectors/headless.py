@@ -17,13 +17,15 @@ class HeadlessDetector(BaseDetector):
                  headless_binary: str | None = None,
                  headless_driver: str | None = None,
                  headless_timeout: float = 60.0,
-                 js_wait: float = 3.0):
+                 js_wait: float = 3.0,
+                 user_agent: str = "chrome"):
         super().__init__(rules)
         self._driver = None
         self._binary = headless_binary
         self._driver_path = headless_driver
         self._timeout = headless_timeout
         self._js_wait = js_wait
+        self._user_agent = user_agent
 
     def enabled(self, config) -> bool:
         return getattr(config, "headless", False)
@@ -40,6 +42,8 @@ class HeadlessDetector(BaseDetector):
             from selenium.webdriver.chrome.options import Options
             from selenium.webdriver.chrome.service import Service
 
+            from yuanzhao.network.client import _resolve_ua
+
             opts = Options()
             if self._binary:
                 opts.binary_location = self._binary
@@ -49,6 +53,8 @@ class HeadlessDetector(BaseDetector):
             opts.add_argument("--disable-dev-shm-usage")
             opts.add_argument("--window-size=1920,1080")
             opts.add_argument("--log-level=3")
+            ua = _resolve_ua(self._user_agent)
+            opts.add_argument(f"--user-agent={ua}")
 
             if self._driver_path:
                 service = Service(self._driver_path)

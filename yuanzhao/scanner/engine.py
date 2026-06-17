@@ -58,6 +58,7 @@ class ScanEngine:
                     headless_driver=cfg.headless_driver,
                     headless_timeout=cfg.headless_timeout,
                     js_wait=cfg.js_wait,
+                    user_agent=cfg.user_agent,
                 )
                 self._detectors.append(hd)
                 self._headless = hd
@@ -127,8 +128,8 @@ class ScanEngine:
             self._scanned.add(url)
 
         timeout = self.config.internal_timeout if ttype == TargetType.INTERNAL_URL else self.config.external_timeout
-        session = create_session(proxy=self.config.proxy, timeout=timeout)
-        result = fetch_url(url, session=session, timeout=timeout)
+        session = create_session(proxy=self.config.proxy, timeout=timeout, user_agent=self.config.user_agent)
+        result = fetch_url(url, session=session, timeout=timeout, user_agent=self.config.user_agent)
 
         if result is None:
             return {"errors": [f"获取失败: {url}"], "findings": [], "scanned_files": [], "scanned_urls": [url]}

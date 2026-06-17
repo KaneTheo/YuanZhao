@@ -49,7 +49,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
   yuanzhao test.html
   yuanzhao ./website -d 2 -m standard -f html
   yuanzhao https://example.com -m deep -f html --verbose
-  yuanzhao https://example.com --headless --js-wait 5
+  yuanzhao https://example.com --ua googlebot -m deep -f html
+  yuanzhao https://example.com --headless --ua baiduspider --js-wait 5
   yuanzhao targets.txt -m deep -f html
         """,
     )
@@ -62,6 +63,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("-f", "--format", choices=["txt", "html", "json", "csv"], default="txt", help="报告格式（默认: txt）")
     parser.add_argument("--timeout", type=float, default=30.0, help="请求超时秒数（默认: 30）")
     parser.add_argument("--proxy", help="HTTP 代理，如 http://127.0.0.1:8080")
+    parser.add_argument(
+        "--ua", "--user-agent", dest="user_agent", default="chrome",
+        help="伪装 User-Agent: chrome(默认) googlebot baiduspider bingbot yandexbot sogou googlebot-mobile 或自定义字符串",
+    )
     parser.add_argument("--keyword-file", help="自定义关键字 CSV 文件路径")
     parser.add_argument("--rules-file", help="自定义检测规则 YAML 文件路径")
     parser.add_argument("--exclude", nargs="+", help="排除的文件或目录模式")
@@ -138,5 +143,6 @@ def build_config(args: argparse.Namespace) -> dict:
         "headless_driver": args.headless_driver,
         "headless_timeout": args.headless_timeout,
         "js_wait": args.js_wait,
+        "user_agent": args.user_agent,
         "target_file": args.target_file,
     }

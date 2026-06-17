@@ -40,6 +40,9 @@ yuanzhao ./website -d 2 -m standard -t 16
 # 启用无头浏览器检测动态内容
 yuanzhao https://example.com --headless --js-wait 5
 
+# 伪装爬虫 UA 检测 cloaking 内容
+yuanzhao https://example.com --ua googlebot -m deep
+
 # 批量扫描（目标列表文件，每行一个目标）
 yuanzhao targets.txt -m deep -f html --verbose
 
@@ -88,6 +91,7 @@ yuanzhao --help
 |------|------|--------|
 | `--timeout` | HTTP 请求超时（秒）| 30 |
 | `--proxy` | HTTP 代理，如 `http://127.0.0.1:8080` | — |
+| `--ua, --user-agent` | 伪装 UA: `chrome`(默认) `googlebot` `baiduspider` `bingbot` `yandexbot` `sogou` 或自定义 | chrome |
 
 ### 文件过滤与自定义规则
 
@@ -170,6 +174,27 @@ rules:
 - 非标准端口
 - 随机生成域名
 - 可疑查询参数
+
+### Cloaking 检测（爬虫 UA 伪装）
+
+部分恶意站会根据 UA 判断是否为搜索引擎爬虫，对爬虫返回暗链/灰产内容，对普通浏览器显示干净页面。
+
+通过 `--ua` 参数伪装为搜索引擎爬虫，触发这些隐藏内容：
+
+```bash
+# 伪装成 Google 爬虫
+yuanzhao https://target.com --ua googlebot -m deep -f html
+
+# 伪装成百度爬虫 + 无头浏览器
+yuanzhao https://target.com --ua baiduspider --headless
+
+# 自定义 UA 字符串
+yuanzhao https://target.com --ua "Mozilla/5.0 (compatible; MyScanner/1.0)"
+```
+
+**预设 UA**：`chrome`（默认）、`googlebot`、`googlebot-mobile`、`baiduspider`、`bingbot`、`yandexbot`、`sogou`
+
+爬虫 UA 同时应用于 HTTP 请求和无头浏览器，确保两端一致触发 cloaking 内容。
 
 ### 隐藏元素检测（正则 + BS4 DOM 分析）
 

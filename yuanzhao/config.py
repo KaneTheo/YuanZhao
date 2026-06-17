@@ -65,6 +65,9 @@ class ScanConfig:
     verbose: bool = False
     no_color: bool = False
 
+    # 网络
+    user_agent: str = "chrome"  # 预设: chrome/googlebot/baiduspider/bingbot 或自定义字符串
+
     # 无头浏览器
     headless: bool = False
     headless_browser: str = "chrome"

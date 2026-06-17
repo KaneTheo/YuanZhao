@@ -35,14 +35,58 @@ BROWSER_HEADERS = {
     "Upgrade-Insecure-Requests": "1",
 }
 
+# 爬虫引擎 UA 预设 — 用于绕过 cloaking（恶意站对搜索引擎返回不同内容）
+_SPIDER_UA_PRESETS: dict[str, str] = {
+    "googlebot": (
+        "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
+    ),
+    "googlebot-mobile": (
+        "Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36 "
+        "(compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
+    ),
+    "baiduspider": (
+        "Mozilla/5.0 (compatible; Baiduspider/2.0; +http://www.baidu.com/search/spider.html)"
+    ),
+    "bingbot": (
+        "Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)"
+    ),
+    "yandexbot": (
+        "Mozilla/5.0 (compatible; YandexBot/3.0; +http://yandex.com/bots)"
+    ),
+    "sogou": (
+        "Sogou web spider/4.0(+http://www.sogou.com/docs/help/webmasters.htm#07)"
+    ),
+    "chrome": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    ),
+}
+
+
+def _resolve_ua(user_agent: str = "chrome") -> str:
+    """根据预设名称或自定义字符串解析 UA 字符串."""
+    if user_agent in _SPIDER_UA_PRESETS:
+        return _SPIDER_UA_PRESETS[user_agent]
+    return user_agent  # 直接作为自定义 UA
+
+
+def get_headers(user_agent: str = "chrome") -> dict[str, str]:
+    """返回包含指定 UA 的请求头字典."""
+    ua = _resolve_ua(user_agent)
+    headers = dict(BROWSER_HEADERS)
+    headers["User-Agent"] = ua
+    return headers
+
 
 def create_session(
     proxy: str | None = None,
     timeout: float = 30.0,
     max_retries: int = 3,
+    user_agent: str = "chrome",
 ) -> requests.Session:
     session = requests.Session()
-    session.headers.update(BROWSER_HEADERS)
+    session.headers.update(get_headers(user_agent))
     session.timeout = timeout  # type: ignore[attr-defined]
 
     retry_strategy = Retry(
@@ -69,13 +113,14 @@ def fetch_url(
     session: requests.Session | None = None,
     timeout: float = 30.0,
     proxy: str | None = None,
+    user_agent: str = "chrome",
 ) -> tuple[str, dict] | None:
     """获取 URL 内容，返回 (text, headers_dict) 或 None."""
     if session is None:
-        session = create_session(proxy=proxy, timeout=timeout)
+        session = create_session(proxy=proxy, timeout=timeout, user_agent=user_agent)
 
     try:
-        resp = session.get(url, headers=BROWSER_HEADERS, timeout=timeout)
+        resp = session.get(url, headers=get_headers(user_agent), timeout=timeout)
         if resp.status_code == 404:
             logger.warning("URL 不存在 (404): %s", url)
         elif resp.status_code >= 400:
